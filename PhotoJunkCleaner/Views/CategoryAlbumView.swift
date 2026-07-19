@@ -219,7 +219,7 @@ private struct PhotoPreviewSheet: View {
     }
 
     private var dateText: String {
-        guard let date = item.asset.creationDate else { return "" }
+        guard let date = item.creationDate else { return "" }
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
