@@ -2,7 +2,7 @@ import SwiftUI
 import Photos
 import UIKit
 
-/// 异步加载 PHAsset 缩略图，用于相簿封面与网格
+/// 异步加载系统相册缩略图
 struct PhotoThumbnail: View {
     let asset: PHAsset?
     var size: CGFloat = 200
@@ -28,10 +28,12 @@ struct PhotoThumbnail: View {
                 image = nil
                 return
             }
-            let px = size * UIScreen.main.scale
+            let scale = UIScreen.main.scale
+            let target = CGSize(width: size * scale, height: size * scale)
             image = await PhotoLibraryService.shared.requestImage(
                 for: asset,
-                targetSize: CGSize(width: px, height: px)
+                targetSize: target,
+                contentMode: .aspectFill
             )
         }
     }
