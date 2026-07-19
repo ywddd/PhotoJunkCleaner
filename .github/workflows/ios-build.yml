@@ -4,16 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main, master]
-    paths:
-      - "PhotoJunkCleaner/**"
-      - "PhotoJunkCleaner.xcodeproj/**"
-      - ".github/workflows/ios-build.yml"
   pull_request:
     branches: [main, master]
 
 jobs:
   build:
-    name: Build (unsigned archive)
+    name: Build unsigned IPA
     runs-on: macos-14
     timeout-minutes: 45
 
@@ -23,14 +19,21 @@ jobs:
 
       - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          set -euo pipefail
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          elif [ -d /Applications/Xcode_16.0.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          else
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
           xcodebuild -version
           xcodebuild -showsdks | grep -i iphone || true
 
       - name: Resolve project path
         id: proj
         run: |
+          set -euo pipefail
           if [ -f "PhotoJunkCleaner.xcodeproj/project.pbxproj" ]; then
             echo "root=." >> "$GITHUB_OUTPUT"
             echo "project=PhotoJunkCleaner.xcodeproj" >> "$GITHUB_OUTPUT"
@@ -41,11 +44,16 @@ jobs:
             echo "scheme=PhotoJunkCleaner" >> "$GITHUB_OUTPUT"
           else
             echo "Xcode project not found" >&2
-            find . -name "*.xcodeproj" -maxdepth 3
+            find . -name "*.xcodeproj" -maxdepth 4
             exit 1
           fi
 
-      - name: Build for iOS Simulator (smoke test)
+      - name: List schemes
+        working-directory: ${{ steps.proj.outputs.root }}
+        run: |
+          xcodebuild -list -project "${{ steps.proj.outputs.project }}" || true
+
+      - name: Build for iOS Simulator (compile check)
         working-directory: ${{ steps.proj.outputs.root }}
         run: |
           set -euo pipefail
@@ -57,22 +65,15 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData-sim \
             CODE_SIGNING_ALLOWED=NO \
-            build | xcpretty || xcodebuild \
-            -project "${{ steps.proj.outputs.project }}" \
-            -scheme "${{ steps.proj.outputs.scheme }}" \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/DerivedData-sim \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Archive for device (unsigned / ad-hoc ready)
+      - name: Build for iOS device (unsigned)
         working-directory: ${{ steps.proj.outputs.root }}
         run: |
           set -euo pipefail
           mkdir -p build/export
-          # 无证书时允许关闭签名，产出 .app 供后续 Sideloadly / 本地重签
           xcodebuild \
             -project "${{ steps.proj.outputs.project }}" \
             -scheme "${{ steps.proj.outputs.scheme }}" \
@@ -88,16 +89,15 @@ jobs:
           APP_PATH=$(find build/DerivedData-ios -name "PhotoJunkCleaner.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "Built .app not found" >&2
-            find build/DerivedData-ios -name "*.app" | head -20
+            find build/DerivedData-ios -name "*.app" 2>/dev/null | head -20
             exit 1
           fi
-          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "Found app: $APP_PATH"
           cp -R "$APP_PATH" build/export/PhotoJunkCleaner.app
 
-          # 打成 Payload IPA（未签名，需 Sideloadly/AltStore/本地证书重签）
           mkdir -p build/export/Payload
           cp -R build/export/PhotoJunkCleaner.app build/export/Payload/
-          (cd build/export && zip -r PhotoJunkCleaner-unsigned.ipa Payload)
+          (cd build/export && zip -yr PhotoJunkCleaner-unsigned.ipa Payload)
           rm -rf build/export/Payload
           ls -lh build/export/
 
@@ -108,109 +108,5 @@ jobs:
           path: |
             ${{ steps.proj.outputs.root }}/build/export/PhotoJunkCleaner-unsigned.ipa
             ${{ steps.proj.outputs.root }}/build/export/PhotoJunkCleaner.app
-          if-no-files-found: error
-          retention-days: 14
-
-  # 可选：若配置了 Apple 证书 Secrets，则生成可安装 IPA
-  # 需要仓库 Secrets：
-  #   BUILD_CERTIFICATE_BASE64, P12_PASSWORD, BUILD_PROVISION_PROFILE_BASE64,
-  #   KEYCHAIN_PASSWORD, TEAM_ID, BUNDLE_ID
-  signed-ipa:
-    name: Build signed IPA (optional)
-    runs-on: macos-14
-    timeout-minutes: 45
-    if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.BUILD_PROVISION_PROFILE_BASE64 != '' }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          xcodebuild -version
-
-      - name: Install certificate & profile
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$PP_PATH"))
-          cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
-
-      - name: Archive & export IPA
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-          BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
-        run: |
-          set -euo pipefail
-          ROOT="."
-          if [ -f "PhotoJunkCleaner/PhotoJunkCleaner.xcodeproj/project.pbxproj" ]; then
-            ROOT="PhotoJunkCleaner"
-          fi
-          cd "$ROOT"
-          BUNDLE_ID="${BUNDLE_ID:-com.yourname.PhotoJunkCleaner}"
-          TEAM_ID="${TEAM_ID:?TEAM_ID secret required}"
-
-          # 临时改 Bundle ID（不提交）
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" PhotoJunkCleaner/Info.plist || true
-          sed -i '' "s/com.yourname.PhotoJunkCleaner/${BUNDLE_ID}/g" PhotoJunkCleaner.xcodeproj/project.pbxproj
-
-          xcodebuild \
-            -project PhotoJunkCleaner.xcodeproj \
-            -scheme PhotoJunkCleaner \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/PhotoJunkCleaner.xcarchive \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            archive
-
-          cat > build/ExportOptions.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>teamID</key>
-            <string>${TEAM_ID}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>compileBitcode</key>
-            <false/>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild -exportArchive \
-            -archivePath build/PhotoJunkCleaner.xcarchive \
-            -exportPath build/ipa \
-            -exportOptionsPlist build/ExportOptions.plist
-
-          ls -lh build/ipa/
-
-      - name: Upload signed IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: PhotoJunkCleaner-signed-ipa
-          path: "**/build/ipa/*.ipa"
           if-no-files-found: error
           retention-days: 14
