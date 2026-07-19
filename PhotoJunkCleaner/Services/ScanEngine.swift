@@ -10,6 +10,7 @@ final class ScanEngine: ObservableObject {
     @Published var errorMessage: String?
     @Published var lastDeletedCount: Int = 0
     @Published var skippedProtectedCount: Int = 0
+    @Published var backgroundNote: String?
 
     private var scanTask: Task<Void, Never>?
     private let library = PhotoLibraryService.shared
@@ -21,7 +22,8 @@ final class ScanEngine: ObservableObject {
         set { settings.minConfidence = newValue }
     }
 
-    var concurrency: Int = 3
+    /// 并行识别数（Vision 可并行，默认按 CPU 核数）
+    var concurrency: Int = max(4, min(8, ProcessInfo.processInfo.activeProcessorCount))
 
     var totalCandidates: Int {
         groups.reduce(0) { $0 + $1.items.count }
@@ -40,6 +42,7 @@ final class ScanEngine: ObservableObject {
         scanTask = nil
         isScanning = false
         progress.phase = "已取消"
+        BackgroundScanKeeper.shared.endBackgroundTask()
     }
 
     func startScan(
@@ -50,9 +53,14 @@ final class ScanEngine: ObservableObject {
         cancel()
         isScanning = true
         errorMessage = nil
+        backgroundNote = nil
         groups = []
         skippedProtectedCount = 0
         progress = ScanProgress(phase: "申请权限…")
+
+        BackgroundScanKeeper.shared.bind(engine: self)
+        BackgroundScanKeeper.shared.beginBackgroundScanIfNeeded()
+        BackgroundScanKeeper.shared.scheduleAppRefresh()
 
         let prefer = preferScreenshots ?? settings.preferScreenshots
         let includeRecent = includeRecentPhotos ?? settings.includeRecent
@@ -60,110 +68,145 @@ final class ScanEngine: ObservableObject {
         let protectFav = settings.protectFavorites
         let albumIds = settings.protectedAlbumIds
         let conf = settings.minConfidence
+        let workers = concurrency
 
         scanTask = Task { [weak self] in
             guard let self else { return }
-            do {
-                let status = try await library.ensureAuthorized()
-                if status == .limited {
-                    self.errorMessage = PhotoAuthError.limitedHint.errorDescription
-                }
+            await self.performScan(
+                prefer: prefer,
+                includeRecent: includeRecent,
+                scanLimit: scanLimit,
+                protectFav: protectFav,
+                albumIds: albumIds,
+                conf: conf,
+                workers: workers
+            )
+        }
+    }
 
-                self.progress.phase = "读取相册…"
-                let assets = library.fetchCandidateAssets(
-                    preferScreenshots: prefer,
-                    includeRecentPhotos: includeRecent,
-                    limit: scanLimit,
-                    skipFavorites: protectFav,
-                    protectedAlbumIds: albumIds
-                )
+    private func performScan(
+        prefer: Bool,
+        includeRecent: Bool,
+        scanLimit: Int,
+        protectFav: Bool,
+        albumIds: Set<String>,
+        conf: Double,
+        workers: Int
+    ) async {
+        do {
+            let status = try await library.ensureAuthorized()
+            if status == .limited {
+                errorMessage = PhotoAuthError.limitedHint.errorDescription
+            }
 
-                if assets.isEmpty {
-                    self.progress.phase = "未找到候选图片（可能全被白名单过滤）"
-                    self.isScanning = false
-                    return
-                }
+            progress.phase = "读取相册…"
+            let assets = library.fetchCandidateAssets(
+                preferScreenshots: prefer,
+                includeRecentPhotos: includeRecent,
+                limit: scanLimit,
+                skipFavorites: protectFav,
+                protectedAlbumIds: albumIds
+            )
 
-                self.progress.total = assets.count
-                self.progress.processed = 0
-                self.progress.found = 0
-                self.progress.phase = "智能识别中…"
+            if assets.isEmpty {
+                progress.phase = "未找到候选图片（可能全被白名单过滤）"
+                isScanning = false
+                BackgroundScanKeeper.shared.endBackgroundTask()
+                return
+            }
 
-                var foundItems: [JunkPhotoItem] = []
-                foundItems.reserveCapacity(min(assets.count, 256))
+            progress.total = assets.count
+            progress.processed = 0
+            progress.found = 0
+            progress.phase = "智能识别中…"
 
-                let batchSize = max(1, concurrency)
-                var index = 0
-                while index < assets.count {
-                    if Task.isCancelled { break }
-                    let end = min(index + batchSize, assets.count)
-                    let batch = Array(assets[index..<end])
+            var foundItems: [JunkPhotoItem] = []
+            foundItems.reserveCapacity(min(assets.count, 256))
 
-                    await withTaskGroup(of: JunkPhotoItem?.self) { group in
-                        for asset in batch {
-                            group.addTask { [self] in
-                                // 扫描期再挡一次收藏
-                                if protectFav && asset.isFavorite { return nil }
-                                let isShot = asset.mediaSubtypes.contains(.photoScreenshot)
-                                guard let image = await self.library.requestAnalysisImage(for: asset) else {
-                                    return nil
-                                }
-                                let result = await self.classifier.classify(image: image, isScreenshot: isShot)
-                                guard let category = result.category else { return nil }
-                                // 分类相关阈值：外卖/快递/二维码更容易进结果
-                                let need: Double
-                                switch category {
-                                case .takeout, .logistics, .qrCode, .payment, .verification:
-                                    need = min(conf, 0.30)
-                                case .chatSnippet:
-                                    need = min(conf, 0.40)
-                                case .genericScreenshot:
-                                    need = max(conf, 0.35)
-                                case .otherJunk:
-                                    need = max(conf, 0.45)
-                                }
-                                guard result.confidence >= need else { return nil }
-                                return JunkPhotoItem(
-                                    id: asset.localIdentifier,
-                                    assetLocalId: asset.localIdentifier,
-                                    category: category,
-                                    confidence: result.confidence,
-                                    reasons: result.reasons,
-                                    creationDate: asset.creationDate,
-                                    isScreenshot: isShot,
-                                    pixelWidth: asset.pixelWidth,
-                                    pixelHeight: asset.pixelHeight,
-                                    isSelected: category.defaultSelected
-                                )
+            let batchSize = max(4, workers)
+            var index = 0
+            var lastUI = Date.distantPast
+
+            while index < assets.count {
+                if Task.isCancelled { break }
+
+                // 后台时续期
+                BackgroundScanKeeper.shared.beginBackgroundScanIfNeeded()
+
+                let end = min(index + batchSize, assets.count)
+                let batch = Array(assets[index..<end])
+
+                await withTaskGroup(of: JunkPhotoItem?.self) { group in
+                    for asset in batch {
+                        group.addTask { [library, classifier] in
+                            if protectFav && asset.isFavorite { return nil }
+                            let isShot = asset.mediaSubtypes.contains(.photoScreenshot)
+                            guard let image = await library.requestAnalysisImage(for: asset) else {
+                                return nil
                             }
-                        }
-                        for await item in group {
-                            if let item {
-                                foundItems.append(item)
+                            // classify 内部：fast OCR，必要时 accurate
+                            let result = await classifier.classify(image: image, isScreenshot: isShot)
+                            guard let category = result.category else { return nil }
+
+                            let need: Double
+                            switch category {
+                            case .takeout, .logistics, .qrCode, .payment, .verification:
+                                need = min(conf, 0.28)
+                            case .chatSnippet:
+                                need = min(conf, 0.38)
+                            case .genericScreenshot:
+                                need = max(conf, 0.34)
+                            case .otherJunk:
+                                need = max(conf, 0.45)
                             }
+                            guard result.confidence >= need else { return nil }
+
+                            return JunkPhotoItem(
+                                id: asset.localIdentifier,
+                                assetLocalId: asset.localIdentifier,
+                                category: category,
+                                confidence: result.confidence,
+                                reasons: result.reasons,
+                                creationDate: asset.creationDate,
+                                isScreenshot: isShot,
+                                pixelWidth: asset.pixelWidth,
+                                pixelHeight: asset.pixelHeight,
+                                isSelected: category.defaultSelected
+                            )
                         }
                     }
-
-                    index = end
-                    self.progress.processed = index
-                    self.progress.found = foundItems.count
-                    self.progress.phase = "识别中 \(index)/\(assets.count) · 命中 \(foundItems.count)"
-                    self.groups = Self.buildGroups(from: foundItems)
+                    for await item in group {
+                        if let item { foundItems.append(item) }
+                    }
                 }
 
-                if Task.isCancelled {
-                    self.progress.phase = "已取消"
-                } else {
-                    self.groups = Self.buildGroups(from: foundItems)
-                    let protectHint = protectFav || !albumIds.isEmpty ? " · 已跳过保护项" : ""
-                    self.progress.phase = "完成 · 共 \(foundItems.count) 张候选\(protectHint)"
+                index = end
+                let now = Date()
+                if now.timeIntervalSince(lastUI) > 0.1 || index >= assets.count {
+                    lastUI = now
+                    progress.processed = index
+                    progress.found = foundItems.count
+                    progress.phase = "识别中 \(index)/\(assets.count) · 命中 \(foundItems.count)"
+                    groups = Self.buildGroups(from: foundItems)
                 }
-            } catch {
-                self.errorMessage = error.localizedDescription
-                self.progress.phase = "出错"
             }
-            self.isScanning = false
+
+            if Task.isCancelled {
+                progress.phase = "已取消"
+            } else {
+                groups = Self.buildGroups(from: foundItems)
+                progress.processed = assets.count
+                progress.found = foundItems.count
+                let protectHint = protectFav || !albumIds.isEmpty ? " · 已跳过保护项" : ""
+                progress.phase = "完成 · 共 \(foundItems.count) 张候选\(protectHint)"
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            progress.phase = "出错"
         }
+
+        isScanning = false
+        BackgroundScanKeeper.shared.endBackgroundTask()
     }
 
     private static func buildGroups(from items: [JunkPhotoItem]) -> [CategoryGroup] {

@@ -244,6 +244,11 @@ private struct ScanningView: View {
             }
 
             Text(engine.progress.phase)
+            Text("锁屏后系统会再给一小段后台时间；彻底杀进程会中断。")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
                 .font(.headline)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)

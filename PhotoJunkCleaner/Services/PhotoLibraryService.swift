@@ -221,7 +221,7 @@ final class PhotoLibraryService {
     }
 
     func requestAnalysisImage(for asset: PHAsset) async -> UIImage? {
-        let maxSide: CGFloat = 1600
+        let maxSide: CGFloat = 900
         let w = CGFloat(asset.pixelWidth)
         let h = CGFloat(asset.pixelHeight)
         let scale = min(1, maxSide / max(w, h, 1))

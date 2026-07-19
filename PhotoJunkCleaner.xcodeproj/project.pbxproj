@@ -20,6 +20,7 @@
 		A1000000000000000000000D /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* AppSettings.swift */; };
 		A1000000000000000000000E /* CategoryAlbumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* CategoryAlbumView.swift */; };
 		A1000000000000000000000F /* PhotoThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* PhotoThumbnail.swift */; };
+		A10000000000000000000010 /* BackgroundScanKeeper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* BackgroundScanKeeper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 		B1000000000000000000000D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		B1000000000000000000000E /* CategoryAlbumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryAlbumView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000F /* PhotoThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoThumbnail.swift; sourceTree = "<group>"; };
+		B10000000000000000000010 /* BackgroundScanKeeper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundScanKeeper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +98,7 @@
 				B10000000000000000000004 /* PhotoLibraryService.swift */,
 				B10000000000000000000005 /* ImageClassifierService.swift */,
 				B10000000000000000000006 /* ScanEngine.swift */,
+				B10000000000000000000010 /* BackgroundScanKeeper.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -194,6 +197,7 @@
 				A1000000000000000000000D /* AppSettings.swift in Sources */,
 				A1000000000000000000000E /* CategoryAlbumView.swift in Sources */,
 				A1000000000000000000000F /* PhotoThumbnail.swift in Sources */,
+				A10000000000000000000010 /* BackgroundScanKeeper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -244,7 +248,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
@@ -255,7 +259,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -272,7 +276,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
@@ -283,7 +287,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
