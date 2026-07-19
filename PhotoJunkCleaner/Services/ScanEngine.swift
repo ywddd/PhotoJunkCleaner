@@ -101,14 +101,14 @@ final class ScanEngine: ObservableObject {
 
                     await withTaskGroup(of: JunkPhotoItem?.self) { group in
                         for asset in batch {
-                            group.addTask {
+                            group.addTask { [self] in
                                 // 扫描期再挡一次收藏
                                 if protectFav && asset.isFavorite { return nil }
                                 let isShot = asset.mediaSubtypes.contains(.photoScreenshot)
-                                guard let image = await library.requestAnalysisImage(for: asset) else {
+                                guard let image = await self.library.requestAnalysisImage(for: asset) else {
                                     return nil
                                 }
-                                let result = await classifier.classify(image: image, isScreenshot: isShot)
+                                let result = await self.classifier.classify(image: image, isScreenshot: isShot)
                                 guard let category = result.category,
                                       result.confidence >= conf else {
                                     return nil

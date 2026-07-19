@@ -39,6 +39,9 @@ final class PhotoLibraryService {
         switch status {
         case .authorized, .limited:
             return status
+        case .notDetermined:
+            // 理论上 request 后不应仍为 notDetermined
+            throw PhotoAuthError.denied
         case .denied:
             throw PhotoAuthError.denied
         case .restricted:
