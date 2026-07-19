@@ -37,13 +37,22 @@ final class AppSettings: ObservableObject {
         static let minConfidence = "settings.minConfidence"
         static let protectFavorites = "settings.protectFavorites"
         static let protectedAlbumIds = "settings.protectedAlbumIds"
+        static let settingsVersion = "settings.version"
     }
 
     private init() {
+        // v2：默认扫截图+近期照片、更低置信度、更大扫描上限
+        let ver = defaults.integer(forKey: Keys.settingsVersion)
+        if ver < 2 {
+            defaults.set(true, forKey: Keys.includeRecent)
+            defaults.set(800, forKey: Keys.scanLimit)
+            defaults.set(0.32, forKey: Keys.minConfidence)
+            defaults.set(2, forKey: Keys.settingsVersion)
+        }
         preferScreenshots = defaults.object(forKey: Keys.preferScreenshots) as? Bool ?? true
-        includeRecent = defaults.object(forKey: Keys.includeRecent) as? Bool ?? false
-        scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 500
-        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.45
+        includeRecent = defaults.object(forKey: Keys.includeRecent) as? Bool ?? true
+        scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 800
+        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.32
         protectFavorites = defaults.object(forKey: Keys.protectFavorites) as? Bool ?? true
         if let arr = defaults.array(forKey: Keys.protectedAlbumIds) as? [String] {
             protectedAlbumIds = Set(arr)

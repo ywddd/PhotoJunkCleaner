@@ -34,7 +34,10 @@ final class ImageClassifierService {
         "到店自取", "自取", "餐具", "无需餐具", "备注", "口味",
         "热门榜", "好评如潮", "月售", "起送", "配送约",
         // 常见文案
-        "美食配送", "外卖订单", "订单编号", "下单时间", "收餐地址"
+        "美食配送", "外卖订单", "订单编号", "下单时间", "收餐地址",
+        "肯德基", "KFC", "麦当劳", "McDonald", "星巴克", "瑞幸", "奈雪", "喜茶",
+        "必胜客", "汉堡王", "德克士", "华莱士", "塔斯汀", "库迪", "蜜雪冰城",
+        "立即支付", "待配送", "已接单", "出餐中", "超值换购", "商品金额"
     ]
 
     private let logisticsKeywords: [String] = [
@@ -51,7 +54,8 @@ final class ImageClassifierService {
         "派送员", "快递员", "快递员电话", "驿站代收", "柜机",
         "请凭取件码", "保管码", "超时将", "滞留", "退回",
         // 通用
-        "物流详情", "物流信息", "包裹", "收件人", "寄件人", "签收"
+        "物流详情", "物流信息", "包裹", "收件人", "寄件人", "签收",
+        "菜鸟裹裹", "裹裹", "快递已到", "请及时取件", "货架号"
     ]
 
     private let paymentKeywords: [String] = [
@@ -136,7 +140,7 @@ final class ImageClassifierService {
                 let lines = observations.compactMap { $0.topCandidates(1).first?.string }
                 cont.resume(returning: lines.joined(separator: "\n"))
             }
-            request.recognitionLevel = .fast
+            request.recognitionLevel = .accurate
             request.usesLanguageCorrection = false
             if #available(iOS 16.0, *) {
                 request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
@@ -182,9 +186,10 @@ final class ImageClassifierService {
 
         let takeoutHits = countHits(text, takeoutKeywords)
         if takeoutHits >= 2 {
-            bump(.takeout, min(0.96, 0.55 + Double(takeoutHits) * 0.08), "外卖关键词 ×\(takeoutHits)")
+            bump(.takeout, min(0.98, 0.62 + Double(takeoutHits) * 0.08), "外卖关键词 ×\(takeoutHits)")
         } else if takeoutHits == 1 {
-            bump(.takeout, 0.55, "外卖关键词 ×1")
+            // 单关键词也识别（美团/饿了么等强特征）
+            bump(.takeout, 0.72, "外卖关键词 ×1")
         }
 
         let logisticsHits = countHits(text, logisticsKeywords)

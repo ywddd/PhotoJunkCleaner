@@ -188,20 +188,11 @@ final class PhotoLibraryService {
     ) async -> UIImage? {
         await withCheckedContinuation { cont in
             let options = PHImageRequestOptions()
-            options.deliveryMode = .opportunistic
+            options.deliveryMode = .highQualityFormat
             options.resizeMode = .fast
             options.isNetworkAccessAllowed = true
             options.isSynchronous = false
-
-            let lock = NSLock()
-            var resumed = false
-            func finish(_ image: UIImage?) {
-                lock.lock()
-                defer { lock.unlock() }
-                guard !resumed else { return }
-                resumed = true
-                cont.resume(returning: image)
-            }
+            options.version = .current
 
             PHImageManager.default().requestImage(
                 for: asset,
@@ -210,22 +201,27 @@ final class PhotoLibraryService {
                 options: options
             ) { image, info in
                 let cancelled = (info?[PHImageCancelledKey] as? Bool) ?? false
-                if cancelled || info?[PHImageErrorKey] != nil {
-                    finish(nil)
+                if cancelled {
+                    cont.resume(returning: nil)
                     return
                 }
-                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
-                if image != nil {
-                    finish(image)
-                } else if !degraded {
-                    finish(nil)
-                }
+                cont.resume(returning: image)
             }
         }
     }
 
+    func requestThumbnail(for asset: PHAsset, side: CGFloat) async -> UIImage? {
+        let scale = await MainActor.run { UIScreen.main.scale }
+        let px = side * scale
+        return await requestImage(
+            for: asset,
+            targetSize: CGSize(width: px, height: px),
+            contentMode: .aspectFill
+        )
+    }
+
     func requestAnalysisImage(for asset: PHAsset) async -> UIImage? {
-        let maxSide: CGFloat = 1280
+        let maxSide: CGFloat = 1600
         let w = CGFloat(asset.pixelWidth)
         let h = CGFloat(asset.pixelHeight)
         let scale = min(1, maxSide / max(w, h, 1))

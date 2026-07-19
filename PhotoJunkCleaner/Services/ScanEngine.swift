@@ -109,10 +109,20 @@ final class ScanEngine: ObservableObject {
                                     return nil
                                 }
                                 let result = await self.classifier.classify(image: image, isScreenshot: isShot)
-                                guard let category = result.category,
-                                      result.confidence >= conf else {
-                                    return nil
+                                guard let category = result.category else { return nil }
+                                // 分类相关阈值：外卖/快递/二维码更容易进结果
+                                let need: Double
+                                switch category {
+                                case .takeout, .logistics, .qrCode, .payment, .verification:
+                                    need = min(conf, 0.30)
+                                case .chatSnippet:
+                                    need = min(conf, 0.40)
+                                case .genericScreenshot:
+                                    need = max(conf, 0.35)
+                                case .otherJunk:
+                                    need = max(conf, 0.45)
                                 }
+                                guard result.confidence >= need else { return nil }
                                 return JunkPhotoItem(
                                     id: asset.localIdentifier,
                                     assetLocalId: asset.localIdentifier,

@@ -1,60 +1,45 @@
 import SwiftUI
 import Photos
 
-/// 某个分类下的「相册」：网格并排，方便核对识别是否准确
+/// 系统相册风格：全宽无缝 3 列网格
 struct CategoryAlbumView: View {
     @ObservedObject var engine: ScanEngine
     let category: JunkCategory
 
-    @State private var columnCount: Int = 3
-    @State private var previewItem: JunkPhotoItem?
-    @State private var showDeleteConfirm = false
+    @State private var columns: Int = 3
+    @State private var preview: JunkPhotoItem?
+    @State private var confirmDelete = false
 
     private var items: [JunkPhotoItem] {
         engine.groups.first(where: { $0.category == category })?.items ?? []
     }
 
-    private var selectedInCategory: Int {
+    private var selectedCount: Int {
         items.filter { $0.isSelected }.count
     }
 
-    private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 3), count: columnCount)
+    private var grid: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 2), count: columns)
     }
 
     var body: some View {
         Group {
             if items.isEmpty {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
-                    Text("此分类暂无照片")
-                        .font(.headline)
-                    Text("返回后可重新扫描")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
+                ContentPlaceholder()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: gridColumns, spacing: 3) {
+                    LazyVGrid(columns: grid, spacing: 2) {
                         ForEach(items) { item in
-                            AlbumPhotoCell(
+                            SystemGridCell(
                                 item: item,
+                                onTap: { preview = item },
                                 onToggle: {
                                     engine.setSelected(id: item.id, selected: !item.isSelected)
-                                },
-                                onPreview: {
-                                    previewItem = item
                                 }
                             )
                         }
                     }
-                    .padding(.horizontal, 2)
-                    .padding(.bottom, 88)
+                    .padding(.bottom, 72)
                 }
             }
         }
@@ -64,21 +49,18 @@ struct CategoryAlbumView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Picker("列数", selection: $columnCount) {
+                    Picker("每行", selection: $columns) {
                         Text("2 列").tag(2)
                         Text("3 列").tag(3)
                         Text("4 列").tag(4)
+                        Text("5 列").tag(5)
                     }
                     Divider()
-                    Button {
+                    Button("选择本类全部") {
                         engine.setCategorySelected(category, selected: true)
-                    } label: {
-                        Label("全选本类", systemImage: "checkmark.circle")
                     }
-                    Button {
+                    Button("取消本类选择") {
                         engine.setCategorySelected(category, selected: false)
-                    } label: {
-                        Label("清空本类", systemImage: "circle")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -86,84 +68,96 @@ struct CategoryAlbumView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if !items.isEmpty {
+            if selectedCount > 0 {
                 HStack {
-                    Text("本类 \(items.count) 张 · 已选 \(selectedInCategory)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Text("已选择 \(selectedCount) 项")
+                        .font(.subheadline)
                     Spacer()
                     Button(role: .destructive) {
-                        showDeleteConfirm = true
+                        confirmDelete = true
                     } label: {
-                        Label(
-                            selectedInCategory > 0 ? "删除 \(selectedInCategory)" : "删除",
-                            systemImage: "trash"
-                        )
-                        .font(.subheadline.weight(.semibold))
+                        Image(systemName: "trash")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 36)
                     }
-                    .disabled(selectedInCategory == 0)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
+                .background(.bar)
             }
         }
         .confirmationDialog(
-            "确认删除本类已选 \(selectedInCategory) 张？",
-            isPresented: $showDeleteConfirm,
+            "删除 \(selectedCount) 张照片？",
+            isPresented: $confirmDelete,
             titleVisibility: .visible
         ) {
-            Button("删除 \(selectedInCategory) 张", role: .destructive) {
-                // 仅保留本类选中：先取消其他分类选中，再删
-                let keep = Set(items.filter { $0.isSelected }.map { $0.id })
-                for g in engine.groups {
-                    for it in g.items {
-                        if g.category != category {
-                            engine.setSelected(id: it.id, selected: false)
-                        } else {
-                            engine.setSelected(id: it.id, selected: keep.contains(it.id))
-                        }
-                    }
-                }
-                Task {
-                    _ = await engine.deleteSelected()
-                }
+            Button("删除照片", role: .destructive) {
+                deleteSelectedInCategory()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将移入「最近删除」，30 天内可在系统相册恢复。")
+            Text("这些项目将从你的 iPhone 上删除，并可在「最近删除」中恢复。")
         }
-        .sheet(item: $previewItem) { item in
-            PhotoPreviewSheet(
+        .fullScreenCover(item: $preview) { item in
+            SystemPreview(
                 item: item,
-                isSelected: item.isSelected,
-                onToggle: {
-                    engine.setSelected(id: item.id, selected: !item.isSelected)
-                    // 刷新 sheet 内状态：关闭再开较重，直接改 engine 即可
-                    if let updated = items.first(where: { $0.id == item.id }) {
-                        previewItem = updated
-                    }
-                }
+                isSelected: Binding(
+                    get: {
+                        engine.groups
+                            .flatMap(\.items)
+                            .first(where: { $0.id == item.id })?
+                            .isSelected ?? item.isSelected
+                    },
+                    set: { engine.setSelected(id: item.id, selected: $0) }
+                ),
+                onClose: { preview = nil }
             )
         }
     }
+
+    private func deleteSelectedInCategory() {
+        let keep = Set(items.filter { $0.isSelected }.map { $0.id })
+        for g in engine.groups {
+            for it in g.items {
+                if g.category != category {
+                    engine.setSelected(id: it.id, selected: false)
+                } else {
+                    engine.setSelected(id: it.id, selected: keep.contains(it.id))
+                }
+            }
+        }
+        Task { _ = await engine.deleteSelected() }
+    }
 }
 
-// MARK: - 网格单元格
+private struct ContentPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image(systemName: "photo.on.rectangle")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text("无照片")
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
 
-private struct AlbumPhotoCell: View {
+private struct SystemGridCell: View {
     let item: JunkPhotoItem
+    let onTap: () -> Void
     let onToggle: () -> Void
-    let onPreview: () -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Button(action: onPreview) {
-                PhotoThumbnail(asset: item.asset, size: 240)
+            Button(action: onTap) {
+                Color.clear
                     .aspectRatio(1, contentMode: .fill)
-                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .overlay {
+                        PhotoThumbnail(asset: item.asset, side: 280)
+                    }
                     .clipped()
                     .contentShape(Rectangle())
             }
@@ -171,100 +165,80 @@ private struct AlbumPhotoCell: View {
 
             Button(action: onToggle) {
                 Image(systemName: item.isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
+                    .font(.system(size: 22))
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(
                         item.isSelected ? Color.white : Color.white.opacity(0.95),
-                        item.isSelected ? Color.accentColor : Color.black.opacity(0.4)
+                        item.isSelected ? Color.blue : Color.black.opacity(0.35)
                     )
                     .padding(6)
-                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            VStack {
-                Spacer()
-                HStack {
-                    Text("\(Int(item.confidence * 100))%")
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule())
-                    Spacer()
-                }
-                .padding(4)
-            }
-            .allowsHitTesting(false)
         }
         .aspectRatio(1, contentMode: .fit)
         .overlay {
             if item.isSelected {
-                Rectangle()
-                    .strokeBorder(Color.accentColor, lineWidth: 3)
+                Rectangle().strokeBorder(Color.blue, lineWidth: 3)
             }
         }
     }
 }
 
-// MARK: - 大图预览
-
-private struct PhotoPreviewSheet: View {
+private struct SystemPreview: View {
     let item: JunkPhotoItem
-    let isSelected: Bool
-    let onToggle: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    @Binding var isSelected: Bool
+    let onClose: () -> Void
 
-    private var reasonText: String {
+    private var reason: String {
         item.reasons.joined(separator: " · ")
     }
 
     private var dateText: String {
-        guard let date = item.creationDate else { return "" }
+        guard let d = item.creationDate else { return "" }
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
-        return f.string(from: date)
+        return f.string(from: d)
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ZStack {
-                    Color.black
-                    PhotoThumbnail(asset: item.asset, size: 1200)
-                        .scaledToFit()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(reasonText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
-                    if !dateText.isEmpty {
-                        Text(dateText)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    Button(action: onToggle) {
-                        HStack {
-                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                            Text(isSelected ? "已选中待清理" : "选中清理")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(isSelected ? .accentColor : .gray)
-                }
-                .padding()
-                .background(Color(.systemBackground))
+            ZStack {
+                Color.black.ignoresSafeArea()
+                PhotoThumbnail(asset: item.asset, side: 1400)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle(item.category.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                    Button("完成", action: onClose)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isSelected.toggle()
+                    } label: {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !dateText.isEmpty {
+                        Text(dateText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(reason.isEmpty ? "置信度 \(Int(item.confidence * 100))%" : reason)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color.black.opacity(0.55))
             }
         }
     }
