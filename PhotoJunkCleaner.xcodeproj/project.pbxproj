@@ -1,0 +1,313 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* PhotoJunkCleanerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* PhotoJunkCleanerApp.swift */; };
+		A10000000000000000000002 /* JunkCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* JunkCategory.swift */; };
+		A10000000000000000000003 /* JunkPhotoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* JunkPhotoItem.swift */; };
+		A10000000000000000000004 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* PhotoLibraryService.swift */; };
+		A10000000000000000000005 /* ImageClassifierService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* ImageClassifierService.swift */; };
+		A10000000000000000000006 /* ScanEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* ScanEngine.swift */; };
+		A10000000000000000000007 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* ContentView.swift */; };
+		A10000000000000000000008 /* ResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* ResultsView.swift */; };
+		A10000000000000000000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* SettingsView.swift */; };
+		A1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* Assets.xcassets */; };
+		A1000000000000000000000D /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* AppSettings.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000001 /* PhotoJunkCleanerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoJunkCleanerApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* JunkCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JunkCategory.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* JunkPhotoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JunkPhotoItem.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* ImageClassifierService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageClassifierService.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* ScanEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanEngine.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* ResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsView.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B1000000000000000000000C /* PhotoJunkCleaner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoJunkCleaner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000000D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C10000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D10000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000002 /* PhotoJunkCleaner */,
+				D10000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D10000000000000000000002 /* PhotoJunkCleaner */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000001 /* PhotoJunkCleanerApp.swift */,
+				D10000000000000000000004 /* Models */,
+				D10000000000000000000005 /* Services */,
+				D10000000000000000000006 /* Views */,
+				B1000000000000000000000A /* Assets.xcassets */,
+				B1000000000000000000000B /* Info.plist */,
+			);
+			path = PhotoJunkCleaner;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000000C /* PhotoJunkCleaner.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000002 /* JunkCategory.swift */,
+				B10000000000000000000003 /* JunkPhotoItem.swift */,
+				B1000000000000000000000D /* AppSettings.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000004 /* PhotoLibraryService.swift */,
+				B10000000000000000000005 /* ImageClassifierService.swift */,
+				B10000000000000000000006 /* ScanEngine.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000007 /* ContentView.swift */,
+				B10000000000000000000008 /* ResultsView.swift */,
+				B10000000000000000000009 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E10000000000000000000001 /* PhotoJunkCleaner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10000000000000000000003 /* Build configuration list for PBXNativeTarget "PhotoJunkCleaner" */;
+			buildPhases = (
+				E10000000000000000000002 /* Sources */,
+				C10000000000000000000001 /* Frameworks */,
+				E10000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PhotoJunkCleaner;
+			productName = PhotoJunkCleaner;
+			productReference = B1000000000000000000000C /* PhotoJunkCleaner.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E10000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					E10000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = F10000000000000000000001 /* Build configuration list for PBXProject "PhotoJunkCleaner" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = D10000000000000000000001;
+			productRefGroup = D10000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E10000000000000000000001 /* PhotoJunkCleaner */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E10000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000000A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E10000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* PhotoJunkCleanerApp.swift in Sources */,
+				A10000000000000000000002 /* JunkCategory.swift in Sources */,
+				A10000000000000000000003 /* JunkPhotoItem.swift in Sources */,
+				A10000000000000000000004 /* PhotoLibraryService.swift in Sources */,
+				A10000000000000000000005 /* ImageClassifierService.swift in Sources */,
+				A10000000000000000000006 /* ScanEngine.swift in Sources */,
+				A10000000000000000000007 /* ContentView.swift in Sources */,
+				A10000000000000000000008 /* ResultsView.swift in Sources */,
+				A10000000000000000000009 /* SettingsView.swift in Sources */,
+				A1000000000000000000000D /* AppSettings.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F10000000000000000000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F10000000000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		F10000000000000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "废图清理";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F10000000000000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "废图清理";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F10000000000000000000001 /* Build configuration list for PBXProject "PhotoJunkCleaner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F10000000000000000000004 /* Debug */,
+				F10000000000000000000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F10000000000000000000003 /* Build configuration list for PBXNativeTarget "PhotoJunkCleaner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F10000000000000000000006 /* Debug */,
+				F10000000000000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E10000000000000000000000 /* Project object */;
+}

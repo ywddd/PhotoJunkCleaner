@@ -1,0 +1,35 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Secrets / local
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+ExportOptions.plist
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
