@@ -27,6 +27,20 @@ enum JunkCategory: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// 相册封面副标题
+    var subtitle: String {
+        switch self {
+        case .takeout: return "美团 / 饿了么 / 订单等"
+        case .logistics: return "快递 / 运单 / 取件码"
+        case .qrCode: return "含二维码或条码"
+        case .payment: return "支付成功 / 账单"
+        case .verification: return "验证码 / 系统通知"
+        case .chatSnippet: return "微信 / QQ 等聊天"
+        case .genericScreenshot: return "其他系统截图"
+        case .otherJunk: return "疑似无用但不确定"
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .takeout: return "takeoutbag.and.cup.and.straw"

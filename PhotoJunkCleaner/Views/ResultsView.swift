@@ -1,200 +1,202 @@
 import SwiftUI
 import Photos
 
+/// 扫描结果首页：像系统相册一样按「分类」展示封面与数量
 struct ResultsView: View {
     @ObservedObject var engine: ScanEngine
-    var onDelete: () -> Void
-    var onRescan: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showDeleteConfirm = false
+    @State private var columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
 
     var body: some View {
-        VStack(spacing: 0) {
-            summaryBar
-            List {
-                ForEach(engine.groups) { group in
-                    Section {
-                        ForEach(group.items) { item in
-                            JunkRow(
-                                item: item,
-                                onToggle: { selected in
-                                    engine.setSelected(id: item.id, selected: selected)
+        NavigationStack {
+            Group {
+                if engine.foundItems.isEmpty {
+                    emptyState
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 14) {
+                            ForEach(engine.groups) { group in
+                                NavigationLink {
+                                    CategoryAlbumView(engine: engine, category: group.category)
+                                } label: {
+                                    CategoryAlbumCard(
+                                        category: group.category,
+                                        count: group.items.count,
+                                        selectedCount: group.items.filter(\.isSelected).count,
+                                        coverAsset: group.items.first?.asset
+                                    )
                                 }
-                            )
-                        }
-                    } header: {
-                        CategoryHeader(
-                            group: group,
-                            onSelectAll: { selected in
-                                engine.setCategorySelected(group.category, selected: selected)
+                                .buttonStyle(.plain)
                             }
-                        )
+                        }
+                        .padding(16)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-
-            bottomBar
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("扫描结果")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            engine.selectAll(true)
+                        } label: {
+                            Label("全选默认清理项", systemImage: "checkmark.circle")
+                        }
+                        Button {
+                            engine.selectAll(false)
+                        } label: {
+                            Label("全部取消", systemImage: "circle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    HStack {
+                        Text(selectionSummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(
+                                "删除\(engine.selectedCount > 0 ? " \(engine.selectedCount)" : "")",
+                                systemImage: "trash"
+                            )
+                        }
+                        .disabled(engine.selectedCount == 0 || engine.isDeleting)
+                    }
+                }
+            }
+            .confirmationDialog(
+                "确认删除 \(engine.selectedCount) 张照片？",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("删除 \(engine.selectedCount) 张", role: .destructive) {
+                    Task {
+                        try? await engine.deleteSelected()
+                        if engine.foundItems.isEmpty {
+                            dismiss()
+                        }
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将移入「最近删除」，30 天内可在系统相册恢复。建议先点进各分类核对缩略图。")
+            }
+            .overlay {
+                if engine.isDeleting {
+                    ZStack {
+                        Color.black.opacity(0.25).ignoresSafeArea()
+                        ProgressView("正在删除…")
+                            .padding(24)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+            }
         }
     }
 
-    private var summaryBar: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("候选 \(engine.totalCandidates) 张")
-                    .font(.subheadline.bold())
-                Text(engine.progress.phase)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+    private var selectionSummary: String {
+        let total = engine.foundItems.count
+        let selected = engine.selectedCount
+        if selected == 0 {
+            return "共 \(total) 张 · 点分类查看"
+        }
+        return "已选 \(selected) / \(total)"
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
             Spacer()
-            Button("全选") { engine.selectAll(true) }
-                .font(.caption.weight(.semibold))
-            Button("全不选") { engine.selectAll(false) }
-                .font(.caption)
-            Button("重扫") { onRescan() }
-                .font(.caption)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-    }
-
-    private var bottomBar: some View {
-        VStack(spacing: 8) {
-            Text("已勾选 \(engine.selectedCount) 张 · 删除前会再次确认")
-                .font(.caption)
+            Image(systemName: "checkmark.seal")
+                .font(.system(size: 48))
+                .foregroundStyle(.green)
+            Text("没有发现可疑废图")
+                .font(.title3.weight(.semibold))
+            Text("可在设置里调低置信度或扩大扫描范围后重试")
+                .font(.footnote)
                 .foregroundStyle(.secondary)
-
-            Button(role: .destructive, action: onDelete) {
-                Label("清理已选 \(engine.selectedCount) 张", systemImage: "trash.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .disabled(engine.selectedCount == 0)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
         }
-        .padding(.top, 8)
-        .background(.ultraThinMaterial)
+        .frame(maxWidth: .infinity)
     }
 }
 
-// MARK: - Header
+// MARK: - 分类封面卡片（类似相册「相簿」）
 
-private struct CategoryHeader: View {
-    let group: CategoryGroup
-    var onSelectAll: (Bool) -> Void
-
-    var body: some View {
-        HStack {
-            Label(group.category.displayName, systemImage: group.category.systemImage)
-                .foregroundStyle(group.category.tint)
-                .font(.subheadline.weight(.semibold))
-            Text("(\(group.items.count))")
-                .foregroundStyle(.secondary)
-            Spacer()
-            let selected = group.selectedCount
-            Text("\(selected)/\(group.items.count)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Button("全选") { onSelectAll(true) }
-                .font(.caption2)
-            Button("取消") { onSelectAll(false) }
-                .font(.caption2)
-        }
-        .textCase(nil)
-    }
-}
-
-// MARK: - Row
-
-private struct JunkRow: View {
-    let item: JunkPhotoItem
-    var onToggle: (Bool) -> Void
-
-    @State private var thumb: UIImage?
+private struct CategoryAlbumCard: View {
+    let category: JunkCategory
+    let count: Int
+    let selectedCount: Int
+    let coverAsset: PHAsset?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Button {
-                onToggle(!item.isSelected)
-            } label: {
-                Image(systemName: item.isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(item.isSelected ? Color.accentColor : .secondary)
-            }
-            .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        PhotoThumbnail(asset: coverAsset, size: 320)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
 
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.secondary.opacity(0.12))
-                if let thumb {
-                    Image(uiImage: thumb)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ProgressView()
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.55)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                HStack(spacing: 6) {
+                    Image(systemName: category.systemImage)
+                    Text("\(count)")
+                        .fontWeight(.semibold)
                 }
-            }
-            .frame(width: 68, height: 68)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                if item.isScreenshot {
-                    Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 9, weight: .bold))
-                        .padding(4)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .padding(4)
-                }
+                .font(.caption)
+                .foregroundStyle(.white)
+                .padding(10)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(item.category.displayName)
-                        .font(.subheadline.bold())
-                    Spacer()
-                    confidenceBadge
-                }
-                if !item.reasons.isEmpty {
-                    Text(item.reasons.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if let date = item.creationDate {
-                    Text(date, format: .dateTime.year().month().day().hour().minute())
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(category.subtitle)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 4)
+                if selectedCount > 0 {
+                    Text("\(selectedCount) 选中")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .onTapGesture { onToggle(!item.isSelected) }
-        .task(id: item.assetLocalId) {
-            await loadThumb()
-        }
-    }
-
-    private var confidenceBadge: some View {
-        Text(String(format: "%.0f%%", item.confidence * 100))
-            .font(.caption2.monospacedDigit().weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(item.category.tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(item.category.tint)
-    }
-
-    private func loadThumb() async {
-        guard let asset = item.asset else { return }
-        let img = await PhotoLibraryService.shared.requestImage(
-            for: asset,
-            targetSize: CGSize(width: 160, height: 160)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
         )
-        await MainActor.run { thumb = img }
     }
 }

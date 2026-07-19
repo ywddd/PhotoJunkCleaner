@@ -18,6 +18,8 @@
 		A10000000000000000000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* SettingsView.swift */; };
 		A1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* Assets.xcassets */; };
 		A1000000000000000000000D /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* AppSettings.swift */; };
+		A1000000000000000000000E /* CategoryAlbumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* CategoryAlbumView.swift */; };
+		A1000000000000000000000F /* PhotoThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* PhotoThumbnail.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +36,8 @@
 		B1000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1000000000000000000000C /* PhotoJunkCleaner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoJunkCleaner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000000000000000000000D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		B1000000000000000000000E /* CategoryAlbumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryAlbumView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* PhotoThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoThumbnail.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,6 +106,8 @@
 				B10000000000000000000007 /* ContentView.swift */,
 				B10000000000000000000008 /* ResultsView.swift */,
 				B10000000000000000000009 /* SettingsView.swift */,
+				B1000000000000000000000E /* CategoryAlbumView.swift */,
+				B1000000000000000000000F /* PhotoThumbnail.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -186,6 +192,8 @@
 				A10000000000000000000008 /* ResultsView.swift in Sources */,
 				A10000000000000000000009 /* SettingsView.swift in Sources */,
 				A1000000000000000000000D /* AppSettings.swift in Sources */,
+				A1000000000000000000000E /* CategoryAlbumView.swift in Sources */,
+				A1000000000000000000000F /* PhotoThumbnail.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,7 +244,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
@@ -247,7 +255,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -264,7 +272,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhotoJunkCleaner/Info.plist;
@@ -275,7 +283,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.PhotoJunkCleaner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
