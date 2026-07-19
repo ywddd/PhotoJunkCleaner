@@ -56,7 +56,7 @@ struct ResultsView: View {
                                 CategoryAlbumCard(
                                     category: group.category,
                                     count: group.items.count,
-                                    selectedCount: group.items.filter(\.isSelected).count,
+                                    selectedCount: group.items.filter { $0.isSelected }.count,
                                     coverAsset: group.items.first?.asset
                                 )
                             }

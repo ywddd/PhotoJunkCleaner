@@ -15,7 +15,7 @@ struct CategoryAlbumView: View {
     }
 
     private var selectedInCategory: Int {
-        items.filter(\.isSelected).count
+        items.filter { $0.isSelected }.count
     }
 
     private var gridColumns: [GridItem] {
@@ -117,7 +117,7 @@ struct CategoryAlbumView: View {
         ) {
             Button("删除 \(selectedInCategory) 张", role: .destructive) {
                 // 仅保留本类选中：先取消其他分类选中，再删
-                let keep = Set(items.filter(\.isSelected).map(\.id))
+                let keep = Set(items.filter { $0.isSelected }.map { $0.id })
                 for g in engine.groups {
                     for it in g.items {
                         if g.category != category {
@@ -214,13 +214,50 @@ private struct PhotoPreviewSheet: View {
     let onToggle: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    private var reasonText: String {
+        item.reasons.joined(separator: " · ")
+    }
+
+    private var dateText: String {
+        guard let date = item.asset.creationDate else { return "" }
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: date)
+    }
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                PhotoThumbnail(asset: item.asset, size: 1200)
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                ZStack {
+                    Color.black
+                    PhotoThumbnail(asset: item.asset, size: 1200)
+                        .scaledToFit()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(reasonText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                    if !dateText.isEmpty {
+                        Text(dateText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    Button(action: onToggle) {
+                        HStack {
+                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            Text(isSelected ? "已选中待清理" : "选中清理")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(isSelected ? .accentColor : .gray)
+                }
+                .padding()
+                .background(Color(.systemBackground))
             }
             .navigationTitle(item.category.displayName)
             .navigationBarTitleDisplayMode(.inline)
@@ -228,31 +265,7 @@ private struct PhotoPreviewSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onToggle) {
-                        Label(
-                            isSelected ? "已选中" : "选中清理",
-                            systemImage: isSelected ? "checkmark.circle.fill" : "circle"
-                        )
-                    }
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.reasons.joined(separator: " · "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                        if let date = item.asset.creationDate {
-                            Text(date.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
-            .toolbarBackground(.visible, for: .navigationBar, .bottomBar)
         }
-        .presentationDetents([.large])
     }
 }
