@@ -157,10 +157,12 @@ final class ScanEngine: ObservableObject {
             let cloudCfg = settings.cloudConfig()
             let quota = CloudQuota(max: cloudCfg.enabled ? max(0, cloudCfg.maxCallsPerScan) : 0)
             cloudCallsUsed = 0
+            // 提示用户云端很慢，勿开「全部+精准+全量云」
             var foundItems: [JunkPhotoItem] = []
             foundItems.reserveCapacity(min(assets.count, 256))
 
-            let batchSize = max(6, workers)
+            // 有云端时批次不必过大（云端本身限流 2）；本地阶段仍并行
+            let batchSize = cloudCfg.enabled ? max(8, min(16, workers * 2)) : max(6, workers)
             var index = 0
             var lastUI = Date.distantPast
 
@@ -171,7 +173,18 @@ final class ScanEngine: ObservableObject {
                 let end = min(index + batchSize, assets.count)
                 let batch = Array(assets[index..<end])
 
-                await withTaskGroup(of: JunkPhotoItem?.self) { group in
+                // —— 阶段 A：本地识别（并行，快）——
+                struct LocalHit {
+                    let asset: PHAsset
+                    let isShot: Bool
+                    let image: UIImage
+                    var result: ClassificationResult
+                }
+
+                var locals: [LocalHit] = []
+                locals.reserveCapacity(batch.count)
+
+                await withTaskGroup(of: LocalHit?.self) { group in
                     for asset in batch {
                         group.addTask { [library, classifier] in
                             if protectFav && asset.isFavorite { return nil }
@@ -179,81 +192,122 @@ final class ScanEngine: ObservableObject {
                             guard let image = await library.requestAnalysisImage(for: asset) else {
                                 return nil
                             }
-                            var result = await classifier.classify(image: image, isScreenshot: isShot)
-
-                            let cloud = cloudCfg
-                            if cloud.enabled {
-                                let uncertain: Bool = {
-                                    guard let cat = result.category else { return true }
-                                    if result.confidence < cloud.uncertainThreshold { return true }
-                                    if cat == .genericScreenshot || cat == .otherJunk { return true }
-                                    return false
-                                }()
-                                let wantCloud = cloud.onlyUncertain ? uncertain : true
-                                if wantCloud, await quota.take() {
-                                    if let cloudResult = await VisionAPIService.shared.classify(
-                                        image: image,
-                                        isScreenshot: isShot,
-                                        ocrHint: result.ocrText,
-                                        settings: cloud
-                                    ) {
-                                        if let cc = cloudResult.category {
-                                            if result.category == nil
-                                                || cloudResult.confidence >= result.confidence - 0.05
-                                                || (result.category == .genericScreenshot && cc != .genericScreenshot) {
-                                                result = cloudResult
-                                            }
-                                        } else if result.category == .genericScreenshot || result.category == .otherJunk {
-                                            if cloudResult.confidence >= 0.55 {
-                                                result = ClassificationResult(
-                                                    category: nil,
-                                                    confidence: cloudResult.confidence,
-                                                    reasons: cloudResult.reasons,
-                                                    hasQRCode: false,
-                                                    ocrText: result.ocrText
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            guard let category = result.category else { return nil }
-
-                            let need: Double
-                            switch category {
-                            case .takeout, .logistics, .qrCode, .payment, .verification:
-                                need = min(conf, 0.42)
-                            case .chatSnippet:
-                                need = min(conf, 0.48)
-                            case .otherJunk:
-                                need = max(min(conf, 0.5), 0.42)
-                            case .genericScreenshot:
-                                need = max(conf, precise ? 0.38 : 0.48)
-                            }
-                            guard result.confidence >= need else { return nil }
-
-                            if !precise && category == .genericScreenshot && result.confidence < 0.52 {
-                                return nil
-                            }
-
-                            return JunkPhotoItem(
-                                id: asset.localIdentifier,
-                                assetLocalId: asset.localIdentifier,
-                                category: category,
-                                confidence: result.confidence,
-                                reasons: result.reasons,
-                                creationDate: asset.creationDate,
-                                isScreenshot: isShot,
-                                pixelWidth: asset.pixelWidth,
-                                pixelHeight: asset.pixelHeight,
-                                isSelected: category.defaultSelected
-                            )
+                            let result = await classifier.classify(image: image, isScreenshot: isShot)
+                            return LocalHit(asset: asset, isShot: isShot, image: image, result: result)
                         }
                     }
-                    for await item in group {
-                        if let item { foundItems.append(item) }
+                    for await hit in group {
+                        if let hit { locals.append(hit) }
                     }
+                }
+
+                // —— 阶段 B：仅对「真不确定」走云端（默认不再对「正常照片」调 API）——
+                if cloudCfg.enabled {
+                    await withTaskGroup(of: (Int, ClassificationResult)?.self) { group in
+                        for (i, hit) in locals.enumerated() {
+                            let result = hit.result
+                            let isShot = hit.isShot
+                            let needCloud: Bool = {
+                                // 关闭「仅不确定」时：仍限制为截图或已有本地弱命中，避免 4000 张全上云
+                                if !cloudCfg.onlyUncertain {
+                                    if let cat = result.category {
+                                        return result.confidence < 0.8
+                                    }
+                                    return isShot
+                                }
+                                // 仅不确定：
+                                if let cat = result.category {
+                                    if result.confidence < cloudCfg.uncertainThreshold { return true }
+                                    // 兜底类可复核
+                                    if cat == .genericScreenshot || cat == .otherJunk { return true }
+                                    // 本地高置信废图：信任本地，不上云
+                                    return false
+                                }
+                                // 本地 none：绝大多数是正常照片 → 默认不上云
+                                // 仅当「系统截图 + 有 OCR 文字」时才请云端二次看
+                                if isShot && !result.ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    return true
+                                }
+                                return false
+                            }()
+
+                            guard needCloud else { continue }
+                            group.addTask {
+                                guard await quota.take() else { return nil }
+                                if let cloudResult = await VisionAPIService.shared.classify(
+                                    image: hit.image,
+                                    isScreenshot: isShot,
+                                    ocrHint: result.ocrText,
+                                    settings: cloudCfg
+                                ) {
+                                    return (i, cloudResult)
+                                }
+                                return nil
+                            }
+                        }
+                        for await upd in group {
+                            guard let (i, cloudResult) = upd else { continue }
+                            var result = locals[i].result
+                            if let cc = cloudResult.category {
+                                if result.category == nil
+                                    || cloudResult.confidence >= result.confidence - 0.05
+                                    || (result.category == .genericScreenshot && cc != .genericScreenshot) {
+                                    result = cloudResult
+                                }
+                            } else if result.category == .genericScreenshot || result.category == .otherJunk {
+                                if cloudResult.confidence >= 0.55 {
+                                    result = ClassificationResult(
+                                        category: nil,
+                                        confidence: cloudResult.confidence,
+                                        reasons: cloudResult.reasons,
+                                        hasQRCode: false,
+                                        ocrText: result.ocrText
+                                    )
+                                }
+                            }
+                            locals[i].result = result
+                        }
+                    }
+                }
+
+                // —— 阶段 C：阈值过滤入结果 ——
+                for hit in locals {
+                    let result = hit.result
+                    let asset = hit.asset
+                    let isShot = hit.isShot
+                    guard let category = result.category else { continue }
+
+                    let need: Double
+                    switch category {
+                    case .takeout, .logistics, .qrCode, .payment, .verification:
+                        need = min(conf, 0.42)
+                    case .chatSnippet:
+                        need = min(conf, 0.48)
+                    case .otherJunk:
+                        need = max(min(conf, 0.5), 0.42)
+                    case .genericScreenshot:
+                        need = max(conf, precise ? 0.38 : 0.48)
+                    }
+                    guard result.confidence >= need else { continue }
+
+                    if !precise && category == .genericScreenshot && result.confidence < 0.52 {
+                        continue
+                    }
+
+                    foundItems.append(
+                        JunkPhotoItem(
+                            id: asset.localIdentifier,
+                            assetLocalId: asset.localIdentifier,
+                            category: category,
+                            confidence: result.confidence,
+                            reasons: result.reasons,
+                            creationDate: asset.creationDate,
+                            isScreenshot: isShot,
+                            pixelWidth: asset.pixelWidth,
+                            pixelHeight: asset.pixelHeight,
+                            isSelected: category.defaultSelected
+                        )
+                    )
                 }
 
                 index = end

@@ -142,7 +142,7 @@ final class VisionAPIService {
         let data = try JSONSerialization.data(withJSONObject: body)
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        req.timeoutInterval = 45
+        req.timeoutInterval = 25
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
         req.httpBody = data
@@ -170,8 +170,8 @@ final class VisionAPIService {
 
     private func makeSession(proxy: String) -> URLSession {
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 45
-        cfg.timeoutIntervalForResource = 60
+        cfg.timeoutIntervalForRequest = 25
+        cfg.timeoutIntervalForResource = 35
         cfg.waitsForConnectivity = true
 
         let p = proxy.trimmingCharacters(in: .whitespacesAndNewlines)

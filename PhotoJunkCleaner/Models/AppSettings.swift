@@ -133,7 +133,7 @@ final class AppSettings: ObservableObject {
         cloudProxyURL = defaults.string(forKey: Keys.cloudProxyURL) ?? ""
         cloudModel = defaults.string(forKey: Keys.cloudModel) ?? "gpt-4o-mini"
         cloudOnlyUncertain = defaults.object(forKey: Keys.cloudOnlyUncertain) as? Bool ?? true
-        cloudMaxCallsPerScan = defaults.object(forKey: Keys.cloudMaxCallsPerScan) as? Int ?? 40
+        cloudMaxCallsPerScan = defaults.object(forKey: Keys.cloudMaxCallsPerScan) as? Int ?? 30
         cloudUncertainThreshold = defaults.object(forKey: Keys.cloudUncertainThreshold) as? Double ?? 0.55
     }
 

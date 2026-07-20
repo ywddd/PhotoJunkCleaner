@@ -23,7 +23,7 @@ struct SettingsView: View {
 
                 Section("云端视觉（可选）") {
                     Toggle("启用云端视觉 API", isOn: $settings.cloudVisionEnabled)
-                    Text("兼容 OpenAI Chat Completions 视觉接口。可填 GPT、Grok（xAI）、或中转站 Base URL。默认仅在本地不确定时调用，并有次数上限。")
+                    Text("兼容 OpenAI 视觉接口。默认：本地先扫；仅「截图存疑 / 弱分类」才上云，正常照片不会张张请求（否则 4000 张会极慢）。可设次数上限。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if settings.cloudVisionEnabled {
@@ -41,7 +41,12 @@ struct SettingsView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
-                        Toggle("仅本地不确定时调用", isOn: $settings.cloudOnlyUncertain)
+                        Toggle("仅本地不确定时调用（推荐）", isOn: $settings.cloudOnlyUncertain)
+                        if !settings.cloudOnlyUncertain {
+                            Text("关闭后会对更多截图上云，速度明显变慢、费用更高。")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
                         Stepper(value: $settings.cloudMaxCallsPerScan, in: 5...500, step: 5) {
                             Text("单次扫描最多云端 \(settings.cloudMaxCallsPerScan) 次")
                         }
