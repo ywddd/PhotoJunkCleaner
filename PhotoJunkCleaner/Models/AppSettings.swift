@@ -14,6 +14,14 @@ final class AppSettings: ObservableObject {
     @Published var scanLimit: Int {
         didSet { defaults.set(scanLimit, forKey: Keys.scanLimit) }
     }
+    /// 扫描普通照片时回溯天数；0 = 不限日期（仍受 scanLimit 约束）
+    @Published var recentDays: Int {
+        didSet { defaults.set(recentDays, forKey: Keys.recentDays) }
+    }
+    /// true = 扫描图库全部图片（最慢，仍受 scanLimit 截断；scanLimit<=0 表示不截断）
+    @Published var scanAllPhotos: Bool {
+        didSet { defaults.set(scanAllPhotos, forKey: Keys.scanAllPhotos) }
+    }
     @Published var minConfidence: Double {
         didSet { defaults.set(minConfidence, forKey: Keys.minConfidence) }
     }
@@ -43,6 +51,8 @@ final class AppSettings: ObservableObject {
         static let protectedAlbumIds = "settings.protectedAlbumIds"
         static let settingsVersion = "settings.version"
         static let preciseMode = "settings.preciseMode"
+        static let recentDays = "settings.recentDays"
+        static let scanAllPhotos = "settings.scanAllPhotos"
     }
 
     private init() {
@@ -61,9 +71,18 @@ final class AppSettings: ObservableObject {
             defaults.set(500, forKey: Keys.scanLimit)
             defaults.set(3, forKey: Keys.settingsVersion)
         }
+        // v4：可选扫更多 / 全部照片
+        if defaults.integer(forKey: Keys.settingsVersion) < 4 {
+            defaults.set(365, forKey: Keys.recentDays)
+            defaults.set(false, forKey: Keys.scanAllPhotos)
+            defaults.set(2000, forKey: Keys.scanLimit)
+            defaults.set(4, forKey: Keys.settingsVersion)
+        }
         preferScreenshots = defaults.object(forKey: Keys.preferScreenshots) as? Bool ?? true
         includeRecent = defaults.object(forKey: Keys.includeRecent) as? Bool ?? true
-        scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 800
+        scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 2000
+        recentDays = defaults.object(forKey: Keys.recentDays) as? Int ?? 365
+        scanAllPhotos = defaults.object(forKey: Keys.scanAllPhotos) as? Bool ?? false
         minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.40
         preciseMode = defaults.object(forKey: Keys.preciseMode) as? Bool ?? false
         protectFavorites = defaults.object(forKey: Keys.protectFavorites) as? Bool ?? true

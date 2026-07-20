@@ -126,7 +126,8 @@ final class PhotoLibraryService {
     func fetchCandidateAssets(
         preferScreenshots: Bool = true,
         includeRecentPhotos: Bool = false,
-        recentDays: Int = 90,
+        recentDays: Int = 365,
+        scanAllPhotos: Bool = false,
         limit: Int = 2000,
         skipFavorites: Bool = true,
         protectedAlbumIds: Set<String> = []
@@ -134,26 +135,28 @@ final class PhotoLibraryService {
         var results: [PHAsset] = []
         var seen = Set<String>()
         let protectedAssets = assetIds(inAlbumIds: protectedAlbumIds)
+        // limit <= 0 表示不截断（最多保护性 20000，避免极端卡死）
+        let hardCap = limit <= 0 ? 20_000 : limit
 
         func consider(_ asset: PHAsset) {
             if skipFavorites && asset.isFavorite { return }
             if protectedAssets.contains(asset.localIdentifier) { return }
+            if asset.mediaType != .image { return }
             if seen.insert(asset.localIdentifier).inserted {
                 results.append(asset)
             }
         }
 
-        if preferScreenshots {
+        func fill(predicate: NSPredicate?, fetchLimit: Int) {
             let opts = PHFetchOptions()
             opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            opts.predicate = NSPredicate(
-                format: "(mediaSubtype & %d) != 0",
-                PHAssetMediaSubtype.photoScreenshot.rawValue
-            )
-            opts.fetchLimit = limit * 2 // 过滤后可能变少，多取一些
-            let shots = PHAsset.fetchAssets(with: .image, options: opts)
-            shots.enumerateObjects { asset, _, stop in
-                if results.count >= limit {
+            opts.predicate = predicate
+            if fetchLimit > 0 {
+                opts.fetchLimit = fetchLimit
+            }
+            let photos = PHAsset.fetchAssets(with: .image, options: opts)
+            photos.enumerateObjects { asset, _, stop in
+                if results.count >= hardCap {
                     stop.pointee = true
                     return
                 }
@@ -161,21 +164,37 @@ final class PhotoLibraryService {
             }
         }
 
+        // 1) 全部图片模式：直接按时间倒序扫图库
+        if scanAllPhotos {
+            fill(predicate: nil, fetchLimit: hardCap * 2)
+            return results
+        }
+
+        // 2) 截图
+        if preferScreenshots {
+            let pred = NSPredicate(
+                format: "(mediaSubtype & %d) != 0",
+                PHAssetMediaSubtype.photoScreenshot.rawValue
+            )
+            fill(predicate: pred, fetchLimit: hardCap * 2)
+        }
+
+        // 3) 近期 / 更长时间段的普通照片
         if includeRecentPhotos {
-            let opts = PHFetchOptions()
-            opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            if let start = Calendar.current.date(byAdding: .day, value: -recentDays, to: Date()) {
-                opts.predicate = NSPredicate(format: "creationDate >= %@", start as NSDate)
+            var pred: NSPredicate? = nil
+            if recentDays > 0, let start = Calendar.current.date(byAdding: .day, value: -recentDays, to: Date()) {
+                pred = NSPredicate(format: "creationDate >= %@", start as NSDate)
             }
-            opts.fetchLimit = limit * 2
-            let photos = PHAsset.fetchAssets(with: .image, options: opts)
-            photos.enumerateObjects { asset, _, stop in
-                if results.count >= limit {
-                    stop.pointee = true
-                    return
-                }
-                consider(asset)
-            }
+            fill(predicate: pred, fetchLimit: hardCap * 2)
+        }
+
+        // 若两者都关，至少给最近截图一点默认，避免 0 候选
+        if !preferScreenshots && !includeRecentPhotos && results.isEmpty {
+            let pred = NSPredicate(
+                format: "(mediaSubtype & %d) != 0",
+                PHAssetMediaSubtype.photoScreenshot.rawValue
+            )
+            fill(predicate: pred, fetchLimit: min(hardCap, 500))
         }
 
         return results

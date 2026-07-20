@@ -21,13 +21,26 @@ struct SettingsView: View {
 
                 Section("扫描范围") {
                     Toggle("优先扫描截图", isOn: $settings.preferScreenshots)
-                    Toggle("包含近期普通照片", isOn: $settings.includeRecent)
-                    Picker("扫描上限", selection: $settings.scanLimit) {
-                        Text("100").tag(100)
-                        Text("300").tag(300)
-                        Text("500").tag(500)
-                        Text("1000").tag(1000)
+                    Toggle("包含普通照片", isOn: $settings.includeRecent)
+                    Toggle("扫描全部照片", isOn: $settings.scanAllPhotos)
+                    if !settings.scanAllPhotos {
+                        Picker("普通照片回溯", selection: $settings.recentDays) {
+                            Text("近 90 天").tag(90)
+                            Text("近 1 年").tag(365)
+                            Text("近 3 年").tag(1095)
+                            Text("不限日期").tag(0)
+                        }
                     }
+                    Picker("扫描上限", selection: $settings.scanLimit) {
+                        Text("500 张").tag(500)
+                        Text("1000 张").tag(1000)
+                        Text("2000 张").tag(2000)
+                        Text("5000 张").tag(5000)
+                        Text("不限制（最多 2 万）").tag(0)
+                    }
+                    Text("相册总数与「本次会扫多少」不是一回事：默认只扫截图 + 一段时间的照片，并用上限保护性能。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {

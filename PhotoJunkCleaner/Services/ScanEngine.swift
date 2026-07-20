@@ -109,13 +109,15 @@ final class ScanEngine: ObservableObject {
             let assets = library.fetchCandidateAssets(
                 preferScreenshots: prefer,
                 includeRecentPhotos: includeRecent,
+                recentDays: self.settings.recentDays,
+                scanAllPhotos: self.settings.scanAllPhotos,
                 limit: scanLimit,
                 skipFavorites: protectFav,
                 protectedAlbumIds: albumIds
             )
 
             if assets.isEmpty {
-                progress.phase = "未找到候选图片（可能全被白名单过滤）"
+                progress.phase = "未找到候选图片。请在设置打开「扫描全部」或提高上限/天数。"
                 isScanning = false
                 BackgroundScanKeeper.shared.endBackgroundTask()
                 return
@@ -124,7 +126,17 @@ final class ScanEngine: ObservableObject {
             progress.total = assets.count
             progress.processed = 0
             progress.found = 0
-            progress.phase = precise ? "精准识别中…" : "快速识别中…"
+            let scopeHint: String = {
+                if self.settings.scanAllPhotos { return "全部图库" }
+                var parts: [String] = []
+                if prefer { parts.append("截图") }
+                if includeRecent {
+                    if self.settings.recentDays <= 0 { parts.append("全部日期") }
+                    else { parts.append("近\(self.settings.recentDays)天") }
+                }
+                return parts.isEmpty ? "默认" : parts.joined(separator: "+")
+            }()
+            progress.phase = "\(precise ? "精准" : "快速") · \(scopeHint) · 候选 \(assets.count) 张"
 
             var foundItems: [JunkPhotoItem] = []
             foundItems.reserveCapacity(min(assets.count, 256))

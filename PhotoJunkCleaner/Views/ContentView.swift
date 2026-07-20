@@ -162,18 +162,37 @@ private struct HomeEmptyView: View {
                     Toggle(isOn: $settings.protectFavorites) {
                         Label("保护收藏（永不删）", systemImage: "heart.fill")
                     }
+                    Toggle(isOn: $settings.scanAllPhotos) {
+                        Label("扫描全部照片", systemImage: "photo.stack")
+                    }
+                    if !settings.scanAllPhotos {
+                        HStack {
+                            Label("普通照片天数", systemImage: "calendar")
+                            Spacer()
+                            Picker("", selection: $settings.recentDays) {
+                                Text("90天").tag(90)
+                                Text("1年").tag(365)
+                                Text("3年").tag(1095)
+                                Text("不限").tag(0)
+                            }
+                            .pickerStyle(.menu)
+                        }
+                    }
                     HStack {
                         Label("最多扫描", systemImage: "number")
                         Spacer()
                         Picker("", selection: $settings.scanLimit) {
-                            Text("100").tag(100)
-                            Text("300").tag(300)
                             Text("500").tag(500)
                             Text("1000").tag(1000)
+                            Text("2000").tag(2000)
+                            Text("5000").tag(5000)
+                            Text("全部").tag(0)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 220)
+                        .pickerStyle(.menu)
                     }
+                    Text("默认不是扫完全部相册：截图 + 一段时间的照片，并有「最多扫描」上限。打开「扫描全部」+ 提高上限可覆盖 4000+ 张。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(16)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
