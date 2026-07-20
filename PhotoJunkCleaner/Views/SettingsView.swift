@@ -170,8 +170,8 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "0.9.0")
-                    Text("本地：系统图像分类 + OCR + 条码。云端视觉为可选项。删除走系统「最近删除」。版本 0.9.0（预发布）。")
+                    LabeledContent("版本", value: "0.9.1")
+                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.1 预发布。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

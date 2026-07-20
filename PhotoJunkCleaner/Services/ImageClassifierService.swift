@@ -303,6 +303,31 @@ final class ImageClassifierService {
     }
 
     private func sceneHints(cgImage: CGImage) async -> SceneHints {
+        // 系统 Vision 分类 + 可选内置 MobileNet，取更强信号
+        async let system = systemSceneHints(cgImage: cgImage)
+        async let mobile = LocalMLService.shared.classifyScene(cgImage: cgImage)
+        let (a, b) = await (system, mobile)
+        return mergeScenes(a, b)
+    }
+
+    private func mergeScenes(_ a: SceneHints, _ b: SceneHints) -> SceneHints {
+        var m = SceneHints()
+        m.foodScore = max(a.foodScore, b.foodScore)
+        m.packageScore = max(a.packageScore, b.packageScore)
+        m.documentScore = max(a.documentScore, b.documentScore)
+        m.screenUIScore = max(a.screenUIScore, b.screenUIScore)
+        m.natureScore = max(a.natureScore, b.natureScore)
+        m.personScore = max(a.personScore, b.personScore)
+        var reasons: [String] = []
+        if LocalMLService.shared.isReady {
+            reasons.append(contentsOf: b.topReasons.prefix(2).map { "ML:\($0)" })
+        }
+        reasons.append(contentsOf: a.topReasons.prefix(2))
+        m.topReasons = Array(reasons.prefix(4))
+        return m
+    }
+
+    private func systemSceneHints(cgImage: CGImage) async -> SceneHints {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 let request = VNClassifyImageRequest()
@@ -323,35 +348,29 @@ final class ImageClassifierService {
                     if tops.count < 3 {
                         tops.append("\(o.identifier) \(Int(c * 100))%")
                     }
-                    // 食物
                     if id.contains("food") || id.contains("meal") || id.contains("dish")
                         || id.contains("pizza") || id.contains("burger") || id.contains("noodle")
                         || id.contains("sushi") || id.contains("dessert") || id.contains("fruit")
                         || id.contains("vegetable") || id.contains("menu") {
                         hints.foodScore = max(hints.foodScore, c)
                     }
-                    // 包装 / 纸箱
                     if id.contains("carton") || id.contains("box") || id.contains("package")
                         || id.contains("envelope") || id.contains("parcel") || id.contains("crate") {
                         hints.packageScore = max(hints.packageScore, c)
                     }
-                    // 文档
                     if id.contains("document") || id.contains("book") || id.contains("paper")
                         || id.contains("letter") || id.contains("newspaper") || id.contains("magazine") {
                         hints.documentScore = max(hints.documentScore, c)
                     }
-                    // 屏幕 / UI
                     if id.contains("screen") || id.contains("monitor") || id.contains("laptop")
                         || id.contains("website") || id.contains("web site") || id.contains("television")
-                        || id.contains("remote control") || id.contains("iPod") {
+                        || id.contains("remote control") || id.contains("ipod") {
                         hints.screenUIScore = max(hints.screenUIScore, c)
                     }
-                    // 人物
                     if id.contains("person") || id.contains("people") || id.contains("face")
                         || id.contains("selfie") || id.contains("bride") || id.contains("groom") {
                         hints.personScore = max(hints.personScore, c)
                     }
-                    // 自然 / 风景 / 宠物
                     if id.contains("landscape") || id.contains("mountain") || id.contains("beach")
                         || id.contains("ocean") || id.contains("forest") || id.contains("sky")
                         || id.contains("valley") || id.contains("lake") || id.contains("dog")
@@ -365,6 +384,7 @@ final class ImageClassifierService {
             }
         }
     }
+
 
     // MARK: - Scoring
 
