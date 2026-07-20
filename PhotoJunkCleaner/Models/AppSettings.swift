@@ -17,6 +17,10 @@ final class AppSettings: ObservableObject {
     @Published var minConfidence: Double {
         didSet { defaults.set(minConfidence, forKey: Keys.minConfidence) }
     }
+    /// 精准识别：慢一倍左右，二次 accurate OCR
+    @Published var preciseMode: Bool {
+        didSet { defaults.set(preciseMode, forKey: Keys.preciseMode) }
+    }
     /// 永不删除 / 不扫描「收藏」
     @Published var protectFavorites: Bool {
         didSet { defaults.set(protectFavorites, forKey: Keys.protectFavorites) }
@@ -38,6 +42,7 @@ final class AppSettings: ObservableObject {
         static let protectFavorites = "settings.protectFavorites"
         static let protectedAlbumIds = "settings.protectedAlbumIds"
         static let settingsVersion = "settings.version"
+        static let preciseMode = "settings.preciseMode"
     }
 
     private init() {
@@ -49,10 +54,18 @@ final class AppSettings: ObservableObject {
             defaults.set(0.32, forKey: Keys.minConfidence)
             defaults.set(2, forKey: Keys.settingsVersion)
         }
+        // v3：默认快速模式 + 更合理置信度，避免把所有截图堆进「普通截图」
+        if defaults.integer(forKey: Keys.settingsVersion) < 3 {
+            defaults.set(false, forKey: Keys.preciseMode)
+            defaults.set(0.40, forKey: Keys.minConfidence)
+            defaults.set(500, forKey: Keys.scanLimit)
+            defaults.set(3, forKey: Keys.settingsVersion)
+        }
         preferScreenshots = defaults.object(forKey: Keys.preferScreenshots) as? Bool ?? true
         includeRecent = defaults.object(forKey: Keys.includeRecent) as? Bool ?? true
         scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 800
-        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.32
+        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.40
+        preciseMode = defaults.object(forKey: Keys.preciseMode) as? Bool ?? false
         protectFavorites = defaults.object(forKey: Keys.protectFavorites) as? Bool ?? true
         if let arr = defaults.array(forKey: Keys.protectedAlbumIds) as? [String] {
             protectedAlbumIds = Set(arr)

@@ -156,6 +156,9 @@ private struct HomeEmptyView: View {
                     Toggle(isOn: $settings.includeRecent) {
                         Label("扫描近期普通照片", systemImage: "photo.on.rectangle")
                     }
+                    Toggle(isOn: $settings.preciseMode) {
+                        Label("精准识别（更慢）", systemImage: "wand.and.stars")
+                    }
                     Toggle(isOn: $settings.protectFavorites) {
                         Label("保护收藏（永不删）", systemImage: "heart.fill")
                     }

@@ -221,12 +221,59 @@ final class PhotoLibraryService {
     }
 
     func requestAnalysisImage(for asset: PHAsset) async -> UIImage? {
-        let maxSide: CGFloat = 900
+        let maxSide: CGFloat = 640
         let w = CGFloat(asset.pixelWidth)
         let h = CGFloat(asset.pixelHeight)
         let scale = min(1, maxSide / max(w, h, 1))
         let size = CGSize(width: max(1, w * scale), height: max(1, h * scale))
-        return await requestImage(for: asset, targetSize: size, contentMode: .aspectFit)
+        return await requestImageFast(for: asset, targetSize: size)
+    }
+
+    /// 分析用：快格式，不拉 iCloud，超时 2s
+    func requestImageFast(for asset: PHAsset, targetSize: CGSize) async -> UIImage? {
+        await withCheckedContinuation { cont in
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .fastFormat
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = false
+            options.isSynchronous = false
+            options.version = .current
+
+            let lock = NSLock()
+            var resumed = false
+            func finish(_ image: UIImage?) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resumed else { return }
+                resumed = true
+                cont.resume(returning: image)
+            }
+
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: targetSize,
+                contentMode: .aspectFit,
+                options: options
+            ) { image, info in
+                let cancelled = (info?[PHImageCancelledKey] as? Bool) ?? false
+                if cancelled || info?[PHImageErrorKey] != nil {
+                    finish(nil)
+                    return
+                }
+                if let image {
+                    finish(image)
+                    return
+                }
+                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                if !degraded {
+                    finish(nil)
+                }
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+                finish(nil)
+            }
+        }
     }
 
     func deleteAssets(withLocalIds ids: [String]) async throws -> Int {

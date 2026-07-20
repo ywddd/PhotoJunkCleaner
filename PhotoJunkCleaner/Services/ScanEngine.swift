@@ -22,8 +22,8 @@ final class ScanEngine: ObservableObject {
         set { settings.minConfidence = newValue }
     }
 
-    /// 并行识别数（Vision 可并行，默认按 CPU 核数）
-    var concurrency: Int = max(4, min(8, ProcessInfo.processInfo.activeProcessorCount))
+    /// 并行：默认偏高以提速（Vision 在子线程）
+    var concurrency: Int = max(6, min(10, ProcessInfo.processInfo.activeProcessorCount + 2))
 
     var totalCandidates: Int {
         groups.reduce(0) { $0 + $1.items.count }
@@ -58,6 +58,9 @@ final class ScanEngine: ObservableObject {
         skippedProtectedCount = 0
         progress = ScanProgress(phase: "申请权限…")
 
+        // 模式：设置里的 preciseMode
+        classifier.preciseMode = settings.preciseMode
+
         BackgroundScanKeeper.shared.bind(engine: self)
         BackgroundScanKeeper.shared.beginBackgroundScanIfNeeded()
         BackgroundScanKeeper.shared.scheduleAppRefresh()
@@ -69,6 +72,7 @@ final class ScanEngine: ObservableObject {
         let albumIds = settings.protectedAlbumIds
         let conf = settings.minConfidence
         let workers = concurrency
+        let precise = settings.preciseMode
 
         scanTask = Task { [weak self] in
             guard let self else { return }
@@ -79,7 +83,8 @@ final class ScanEngine: ObservableObject {
                 protectFav: protectFav,
                 albumIds: albumIds,
                 conf: conf,
-                workers: workers
+                workers: workers,
+                precise: precise
             )
         }
     }
@@ -91,7 +96,8 @@ final class ScanEngine: ObservableObject {
         protectFav: Bool,
         albumIds: Set<String>,
         conf: Double,
-        workers: Int
+        workers: Int,
+        precise: Bool
     ) async {
         do {
             let status = try await library.ensureAuthorized()
@@ -118,19 +124,17 @@ final class ScanEngine: ObservableObject {
             progress.total = assets.count
             progress.processed = 0
             progress.found = 0
-            progress.phase = "智能识别中…"
+            progress.phase = precise ? "精准识别中…" : "快速识别中…"
 
             var foundItems: [JunkPhotoItem] = []
             foundItems.reserveCapacity(min(assets.count, 256))
 
-            let batchSize = max(4, workers)
+            let batchSize = max(6, workers)
             var index = 0
             var lastUI = Date.distantPast
 
             while index < assets.count {
                 if Task.isCancelled { break }
-
-                // 后台时续期
                 BackgroundScanKeeper.shared.beginBackgroundScanIfNeeded()
 
                 let end = min(index + batchSize, assets.count)
@@ -144,22 +148,27 @@ final class ScanEngine: ObservableObject {
                             guard let image = await library.requestAnalysisImage(for: asset) else {
                                 return nil
                             }
-                            // classify 内部：fast OCR，必要时 accurate
                             let result = await classifier.classify(image: image, isScreenshot: isShot)
                             guard let category = result.category else { return nil }
 
+                            // 快速模式对「普通截图」更严，减少噪声堆
                             let need: Double
                             switch category {
                             case .takeout, .logistics, .qrCode, .payment, .verification:
-                                need = min(conf, 0.28)
+                                need = min(conf, 0.45)
                             case .chatSnippet:
-                                need = min(conf, 0.38)
+                                need = min(conf, 0.5)
                             case .genericScreenshot:
-                                need = max(conf, 0.34)
+                                need = max(conf, precise ? 0.4 : 0.5)
                             case .otherJunk:
-                                need = max(conf, 0.45)
+                                need = max(conf, 0.55)
                             }
                             guard result.confidence >= need else { return nil }
+
+                            // 快速模式：普通截图默认不勾选且仅在置信更高时才收录
+                            if !precise && category == .genericScreenshot && result.confidence < 0.55 {
+                                return nil
+                            }
 
                             return JunkPhotoItem(
                                 id: asset.localIdentifier,
@@ -182,11 +191,12 @@ final class ScanEngine: ObservableObject {
 
                 index = end
                 let now = Date()
-                if now.timeIntervalSince(lastUI) > 0.1 || index >= assets.count {
+                // UI 刷新更稀：0.2s
+                if now.timeIntervalSince(lastUI) > 0.2 || index >= assets.count {
                     lastUI = now
                     progress.processed = index
                     progress.found = foundItems.count
-                    progress.phase = "识别中 \(index)/\(assets.count) · 命中 \(foundItems.count)"
+                    progress.phase = "\(precise ? "精准" : "快速") \(index)/\(assets.count) · 命中 \(foundItems.count)"
                     groups = Self.buildGroups(from: foundItems)
                 }
             }
@@ -198,7 +208,7 @@ final class ScanEngine: ObservableObject {
                 progress.processed = assets.count
                 progress.found = foundItems.count
                 let protectHint = protectFav || !albumIds.isEmpty ? " · 已跳过保护项" : ""
-                progress.phase = "完成 · 共 \(foundItems.count) 张候选\(protectHint)"
+                progress.phase = "完成 · 共 \(foundItems.count) 张\(protectHint)"
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -213,7 +223,10 @@ final class ScanEngine: ObservableObject {
         let dict = Dictionary(grouping: items, by: \.category)
         return JunkCategory.allCases.compactMap { cat in
             guard var list = dict[cat], !list.isEmpty else { return nil }
-            list.sort { ($0.creationDate ?? .distantPast) > ($1.creationDate ?? .distantPast) }
+            list.sort {
+                if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }
+                return ($0.creationDate ?? .distantPast) > ($1.creationDate ?? .distantPast)
+            }
             return CategoryGroup(category: cat, items: list)
         }
     }

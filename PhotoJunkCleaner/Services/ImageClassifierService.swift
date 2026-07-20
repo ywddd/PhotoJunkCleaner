@@ -11,147 +11,153 @@ struct ClassificationResult {
     let ocrText: String
 }
 
-/// 本地 Vision 规则分类：快扫(fast) + 必要时精扫(accurate)
+/// 本地 Vision 规则分类
+/// - 快速模式：只跑 fast OCR + 条码，不二次精扫
+/// - 精准模式：弱结果再 accurate 精扫
 final class ImageClassifierService {
     static let shared = ImageClassifierService()
+
+    /// true = 允许二次 accurate（更慢更准）
+    var preciseMode: Bool = false
+
     private init() {
-        // 预编译小写关键词，避免每张图重复 lowercased()
-        takeoutFast = Self.prep(Self.takeoutStrong)
-        takeoutAll = Self.prep(Self.takeoutKeywords)
-        logisticsAll = Self.prep(Self.logisticsKeywords)
-        paymentAll = Self.prep(Self.paymentKeywords)
-        verificationAll = Self.prep(Self.verificationKeywords)
-        chatAll = Self.prep(Self.chatKeywords)
-        junkUIAll = Self.prep(Self.junkUIHints)
+        strongTakeout = Self.prep(Self.strongTakeoutKW)
+        weakTakeout = Self.prep(Self.weakTakeoutKW)
+        strongLogistics = Self.prep(Self.strongLogisticsKW)
+        weakLogistics = Self.prep(Self.weakLogisticsKW)
+        strongPayment = Self.prep(Self.strongPaymentKW)
+        weakPayment = Self.prep(Self.weakPaymentKW)
+        strongVerify = Self.prep(Self.strongVerifyKW)
+        strongChat = Self.prep(Self.strongChatKW)
     }
 
-    // MARK: - 强特征（单命中即可）
+    // MARK: - 关键词分层：强特征单命中即可；弱特征需 ≥2 或组合
 
-    private static let takeoutStrong: [String] = [
-        "美团", "美团外卖", "饿了么", "ele.me", "eleme", "keeta", "抖音外卖", "京东外卖",
-        "淘宝闪购", "蜂鸟配送", "外卖订单", "再来一单", "联系骑手", "骑手正在",
-        "预计送达", "取餐码", "准时宝", "meituan", "foodpanda", "uber eats"
+    private static let strongTakeoutKW: [String] = [
+        "美团", "美团外卖", "饿了么", "ele.me", "eleme", "keeta",
+        "抖音外卖", "京东外卖", "淘宝闪购", "蜂鸟配送", "蜂鸟",
+        "meituan", "foodpanda", "uber eats",
+        "再来一单", "联系骑手", "骑手正在", "预计送达", "取餐码",
+        "准时宝", "外卖订单", "无需餐具", "配送费", "餐盒费",
+        "肯德基", "kfc", "麦当劳", "mcdonald", "星巴克", "瑞幸",
+        "必胜客", "汉堡王", "华莱士", "塔斯汀", "蜜雪冰城", "库迪"
     ]
 
-    private static let takeoutKeywords: [String] = [
-        "美团", "饿了么", "外卖", "美团外卖", "饿了么会员", "蜂鸟", "蜂鸟配送",
-        "Meituan", "Ele.me", "ele.me", "Keeta", "Foodpanda", "Uber Eats",
-        "抖音外卖", "京东外卖", "淘宝闪购", "口碑",
-        "配送中", "预计送达", "骑手", "骑手正在", "正在配送", "已取餐",
-        "取餐码", "取餐号", "取餐柜", "餐柜", "订单已送达", "已送达",
-        "待配送", "待取餐", "商家已接单", "骑手已接单", "骑手距你",
-        "分钟送达", "准时宝", "超时赔",
-        "订单详情", "再来一单", "联系商家", "联系骑手", "配送费", "打包费",
-        "餐盒费", "神券", "本单", "实付", "无需餐具",
-        "月售", "起送", "配送约", "美食配送", "外卖订单", "收餐地址",
-        "肯德基", "KFC", "麦当劳", "McDonald", "星巴克", "瑞幸", "奈雪", "喜茶",
-        "必胜客", "汉堡王", "德克士", "华莱士", "塔斯汀", "库迪", "蜜雪冰城",
-        "立即支付", "出餐中", "超值换购", "商品金额", "餐品", "点外卖"
+    private static let weakTakeoutKW: [String] = [
+        "外卖", "骑手", "配送中", "正在配送", "已取餐", "待取餐",
+        "取餐柜", "出餐", "打包费", "神券", "满减", "起送",
+        "月售", "收餐地址", "超值换购", "点外卖", "餐品"
     ]
 
-    private static let logisticsKeywords: [String] = [
-        "快递", "物流", "运单", "运单号", "快递单号", "物流单号", "追踪号",
-        "顺丰", "顺丰速运", "中通", "圆通", "韵达", "申通", "百世", "极兔",
-        "京东快递", "京东物流", "德邦", "EMS", "邮政", "中国邮政",
-        "菜鸟", "菜鸟驿站", "驿站", "丰巢", "快递柜", "自提柜", "代收点",
-        "闪送", "UU跑腿", "达达", "同城急送",
-        "派送中", "派件中", "已签收", "待取件", "取件码", "取件通知",
-        "运输中", "已揽收", "已发货", "快递员", "驿站代收",
-        "请凭取件码", "保管码", "物流详情", "物流信息", "包裹",
-        "菜鸟裹裹", "快递已到", "请及时取件", "货架号", "取件"
+    private static let strongLogisticsKW: [String] = [
+        "顺丰", "中通", "圆通", "韵达", "申通", "极兔", "德邦",
+        "菜鸟驿站", "菜鸟裹裹", "丰巢", "快递柜", "取件码",
+        "京东快递", "京东物流", "运单号", "快递单号", "物流单号",
+        "派件中", "派送中", "已签收", "请凭取件码", "驿站"
     ]
 
-    private static let paymentKeywords: [String] = [
-        "支付成功", "收款成功", "转账成功", "微信支付", "支付宝", "付款码", "收款码",
-        "已付款", "交易成功", "到账", "付款给", "商家收款", "扫码支付",
-        "付款成功", "退款成功", "云闪付", "银联", "账单详情", "消费记录",
-        "转账", "收款", "零钱"
+    private static let weakLogisticsKW: [String] = [
+        "快递", "物流", "运单", "包裹", "揽收", "代收点", "自提柜",
+        "快递员", "取件", "运输中"
     ]
 
-    private static let verificationKeywords: [String] = [
-        "验证码", "动态码", "安全码", "登录验证", "校验码", "短信验证",
-        "verification code", "OTP", "一次性密码", "请勿泄露", "切勿告知",
-        "分钟内有效", "登录码", "身份验证", "二次验证", "两步验证", "动态密码"
+    private static let strongPaymentKW: [String] = [
+        "支付成功", "转账成功", "微信支付", "支付宝", "付款码", "收款码",
+        "交易成功", "云闪付", "付款成功", "退款成功", "收款成功"
     ]
 
-    private static let chatKeywords: [String] = [
-        "微信", "WeChat", "按住 说话", "按住说话",
-        "对方正在输入", "语音通话", "视频通话",
-        "企业微信", "钉钉", "飞书", "Telegram", "WhatsApp",
-        "撤回了一条消息"
+    private static let weakPaymentKW: [String] = [
+        "转账", "收款", "账单", "到账", "付款", "扣款"
     ]
 
-    private static let junkUIHints: [String] = [
-        "截屏", "Screenshot", "屏幕截图"
+    private static let strongVerifyKW: [String] = [
+        "验证码", "动态码", "校验码", "短信验证", "请勿泄露",
+        "切勿告知", "登录验证", "otp", "verification code"
     ]
 
-    private let takeoutFast: [(raw: String, low: String)]
-    private let takeoutAll: [(raw: String, low: String)]
-    private let logisticsAll: [(raw: String, low: String)]
-    private let paymentAll: [(raw: String, low: String)]
-    private let verificationAll: [(raw: String, low: String)]
-    private let chatAll: [(raw: String, low: String)]
-    private let junkUIAll: [(raw: String, low: String)]
+    private static let strongChatKW: [String] = [
+        "按住说话", "按住 说话", "对方正在输入", "撤回了一条消息",
+        "语音通话", "视频通话", "企业微信"
+    ]
 
-    private static func prep(_ list: [String]) -> [(raw: String, low: String)] {
-        list.map { ($0, $0.lowercased()) }
+    private let strongTakeout: [String]
+    private let weakTakeout: [String]
+    private let strongLogistics: [String]
+    private let weakLogistics: [String]
+    private let strongPayment: [String]
+    private let weakPayment: [String]
+    private let strongVerify: [String]
+    private let strongChat: [String]
+
+    private static func prep(_ list: [String]) -> [String] {
+        list.map { $0.lowercased() }
     }
 
     // MARK: - Public
 
-    /// 主入口：默认 fast OCR；置信模糊时再 accurate 精扫
     func classify(image: UIImage, isScreenshot: Bool, forceAccurate: Bool = false) async -> ClassificationResult {
         guard let cgImage = cgImage(from: image) else {
+            return empty(isScreenshot: isScreenshot)
+        }
+
+        // 快路径：条码优先；有码可跳过 OCR（极大加速二维码页）
+        let barcodeOnly = await detectBarcodesOnly(cgImage: cgImage)
+        if barcodeOnly.hasQR || barcodeOnly.count > 0 {
             return ClassificationResult(
-                category: isScreenshot ? .genericScreenshot : nil,
-                confidence: isScreenshot ? 0.4 : 0,
-                reasons: isScreenshot ? ["系统标记为截图"] : [],
-                hasQRCode: false,
+                category: .qrCode,
+                confidence: barcodeOnly.hasQR ? 0.95 : 0.78,
+                reasons: [barcodeOnly.hasQR ? "检测到二维码" : "检测到条码"],
+                hasQRCode: barcodeOnly.hasQR,
                 ocrText: ""
             )
         }
 
-        // 1) 条码 + 快速 OCR 同一次 perform
-        let first = await visionPass(cgImage: cgImage, accurate: forceAccurate)
-        var result = score(
-            ocrText: first.text,
-            hasQRCode: first.hasQR,
-            barcodeCount: first.barcodeCount,
-            isScreenshot: isScreenshot
-        )
+        let accurate = forceAccurate || preciseMode
+        let pass = await ocrPass(cgImage: cgImage, accurate: accurate)
+        var result = score(ocrText: pass, isScreenshot: isScreenshot)
 
-        // 2) 需要精扫的情况：截图但类别弱 / 非截图有弱命中
-        let needRefine: Bool = {
-            if forceAccurate { return false }
-            if first.hasQR { return false } // 二维码已够准
-            guard let cat = result.category else {
-                // 截图无命中：精扫一次，可能漏了外卖字
-                return isScreenshot && !first.text.isEmpty
-            }
-            if cat == .genericScreenshot { return true }
-            if result.confidence < 0.55 { return true }
-            return false
-        }()
-
-        if needRefine {
-            let second = await visionPass(cgImage: cgImage, accurate: true)
-            let refined = score(
-                ocrText: second.text,
-                hasQRCode: second.hasQR || first.hasQR,
-                barcodeCount: max(second.barcodeCount, first.barcodeCount),
-                isScreenshot: isScreenshot
-            )
-            // 精扫结果更好则采用
-            if (refined.category != nil && refined.confidence >= result.confidence)
-                || (result.category == .genericScreenshot && refined.category != .genericScreenshot) {
-                result = refined
+        // 精准模式：仅当「有弱文字但未分类」才二次 accurate（快速模式永不二次）
+        if preciseMode && !forceAccurate && !accurate {
+            let shouldRefine =
+                (result.category == nil && isScreenshot && pass.count >= 4)
+                || (result.category == .genericScreenshot && pass.count >= 8)
+            if shouldRefine {
+                let pass2 = await ocrPass(cgImage: cgImage, accurate: true)
+                let r2 = score(ocrText: pass2, isScreenshot: isScreenshot)
+                if better(r2, than: result) { result = r2 }
             }
         }
 
         return result
     }
 
-    // MARK: - Image helpers
+    private func empty(isScreenshot: Bool) -> ClassificationResult {
+        ClassificationResult(
+            category: isScreenshot ? .genericScreenshot : nil,
+            confidence: isScreenshot ? 0.35 : 0,
+            reasons: isScreenshot ? ["系统标记为截图"] : [],
+            hasQRCode: false,
+            ocrText: ""
+        )
+    }
+
+    private func better(_ a: ClassificationResult, than b: ClassificationResult) -> Bool {
+        let ar = rank(a.category)
+        let br = rank(b.category)
+        if ar != br { return ar > br }
+        return a.confidence > b.confidence
+    }
+
+    private func rank(_ c: JunkCategory?) -> Int {
+        guard let c else { return 0 }
+        switch c {
+        case .takeout, .logistics, .qrCode, .payment, .verification: return 3
+        case .chatSnippet: return 2
+        case .genericScreenshot, .otherJunk: return 1
+        }
+    }
+
+    // MARK: - Vision
 
     private func cgImage(from image: UIImage) -> CGImage? {
         if let cg = image.cgImage { return cg }
@@ -159,161 +165,177 @@ final class ImageClassifierService {
         return CIContext(options: [.useSoftwareRenderer: false]).createCGImage(ci, from: ci.extent)
     }
 
-    private struct VisionPass {
-        let text: String
+    private struct BarcodeHit {
         let hasQR: Bool
-        let barcodeCount: Int
+        let count: Int
     }
 
-    /// 条码 + OCR 一次 handler.perform，显著减少开销
-    private func visionPass(cgImage: CGImage, accurate: Bool) async -> VisionPass {
+    private func detectBarcodesOnly(cgImage: CGImage) async -> BarcodeHit {
         await withCheckedContinuation { cont in
-            // 在后台队列执行 Vision，避免占主线程
             DispatchQueue.global(qos: .userInitiated).async {
-                let barcodeReq = VNDetectBarcodesRequest()
-                barcodeReq.symbologies = [.qr, .aztec, .dataMatrix, .ean13, .ean8, .code128, .pdf417]
-
-                let textReq = VNRecognizeTextRequest()
-                textReq.recognitionLevel = accurate ? .accurate : .fast
-                textReq.usesLanguageCorrection = false
-                // 快扫只要前若干候选，加速
-                textReq.minimumTextHeight = accurate ? 0.015 : 0.02
-                if #available(iOS 16.0, *) {
-                    textReq.recognitionLanguages = ["zh-Hans", "en-US"]
-                }
-
+                let req = VNDetectBarcodesRequest()
+                // 只检 QR/常用，减少开销
+                req.symbologies = [.qr, .ean13, .code128, .pdf417]
                 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 do {
-                    try handler.perform([barcodeReq, textReq])
+                    try handler.perform([req])
                 } catch {
-                    cont.resume(returning: VisionPass(text: "", hasQR: false, barcodeCount: 0))
+                    cont.resume(returning: BarcodeHit(hasQR: false, count: 0))
                     return
                 }
-
-                let codes = (barcodeReq.results as? [VNBarcodeObservation]) ?? []
-                let hasQR = codes.contains { $0.symbology == .qr }
-                let observations = (textReq.results as? [VNRecognizedTextObservation]) ?? []
-                // 只取高置信行，减少噪声
-                let lines: [String] = observations.compactMap { obs in
-                    guard let c = obs.topCandidates(1).first else { return nil }
-                    if c.confidence < 0.25 { return nil }
-                    return c.string
-                }
-                cont.resume(returning: VisionPass(
-                    text: lines.joined(separator: "\n"),
-                    hasQR: hasQR,
-                    barcodeCount: codes.count
+                let codes = (req.results as? [VNBarcodeObservation]) ?? []
+                cont.resume(returning: BarcodeHit(
+                    hasQR: codes.contains { $0.symbology == .qr },
+                    count: codes.count
                 ))
             }
         }
     }
 
-    // MARK: - Scoring（加权）
+    private func ocrPass(cgImage: CGImage, accurate: Bool) async -> String {
+        await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let textReq = VNRecognizeTextRequest()
+                textReq.recognitionLevel = accurate ? .accurate : .fast
+                textReq.usesLanguageCorrection = false
+                textReq.minimumTextHeight = accurate ? 0.012 : 0.025
+                if #available(iOS 16.0, *) {
+                    // 快扫只用简体+英文
+                    textReq.recognitionLanguages = accurate ? ["zh-Hans", "zh-Hant", "en-US"] : ["zh-Hans", "en-US"]
+                }
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+                do {
+                    try handler.perform([textReq])
+                } catch {
+                    cont.resume(returning: "")
+                    return
+                }
+                let observations = (textReq.results as? [VNRecognizedTextObservation]) ?? []
+                var lines: [String] = []
+                lines.reserveCapacity(min(observations.count, 40))
+                for obs in observations.prefix(60) {
+                    guard let c = obs.topCandidates(1).first, c.confidence >= 0.28 else { continue }
+                    lines.append(c.string)
+                }
+                cont.resume(returning: lines.joined(separator: "\n"))
+            }
+        }
+    }
 
-    private func score(
-        ocrText: String,
-        hasQRCode: Bool,
-        barcodeCount: Int,
-        isScreenshot: Bool
-    ) -> ClassificationResult {
+    // MARK: - Scoring
+
+    private func score(ocrText: String, isScreenshot: Bool) -> ClassificationResult {
         let lower = ocrText.lowercased()
+        if lower.isEmpty {
+            return empty(isScreenshot: isScreenshot)
+        }
+
         var scores: [JunkCategory: Double] = [:]
         var reasons: [JunkCategory: [String]] = [:]
 
-        func add(_ cat: JunkCategory, _ points: Double, _ reason: String) {
-            scores[cat, default: 0] += points
-            if reasons[cat, default: []].count < 6, !reasons[cat, default: []].contains(reason) {
-                reasons[cat, default: []].append(reason)
+        func add(_ cat: JunkCategory, _ pts: Double, _ reason: String) {
+            scores[cat, default: 0] += pts
+            var r = reasons[cat] ?? []
+            if r.count < 5, !r.contains(reason) { r.append(reason); reasons[cat] = r }
+        }
+
+        // —— 外卖 ——
+        let st = hits(lower, strongTakeout)
+        if st > 0 {
+            add(.takeout, min(0.98, 0.82 + Double(st - 1) * 0.05), "外卖强特征×\(st)")
+        }
+        let wt = hits(lower, weakTakeout)
+        if wt >= 2 {
+            add(.takeout, min(0.9, 0.45 + Double(wt) * 0.1), "外卖弱特征×\(wt)")
+        } else if wt == 1 && st == 0 {
+            // 单弱特征不够，除非截图 + 金额符号
+            if isScreenshot && (ocrText.contains("¥") || ocrText.contains("￥") || lower.contains("元")) {
+                add(.takeout, 0.55, "外卖弱特征+金额")
             }
         }
-
-        // 强外卖品牌
-        let strongHits = countHits(lower, takeoutFast)
-        if strongHits > 0 {
-            add(.takeout, min(0.95, 0.78 + Double(strongHits - 1) * 0.06), "外卖平台/强特征 ×\(strongHits)")
+        if (lower.contains("骑手") || lower.contains("配送")) &&
+            (lower.contains("送达") || lower.contains("取餐") || ocrText.contains("¥") || ocrText.contains("￥")) {
+            add(.takeout, 0.3, "配送场景")
         }
 
-        let takeoutHits = countHits(lower, takeoutAll)
-        if takeoutHits > 0 {
-            add(.takeout, min(0.9, 0.35 + Double(takeoutHits) * 0.12), "外卖关键词 ×\(takeoutHits)")
+        // —— 快递 ——
+        let sl = hits(lower, strongLogistics)
+        if sl > 0 {
+            add(.logistics, min(0.96, 0.8 + Double(sl - 1) * 0.05), "快递强特征×\(sl)")
+        }
+        let wl = hits(lower, weakLogistics)
+        if wl >= 2 {
+            add(.logistics, min(0.88, 0.4 + Double(wl) * 0.1), "快递弱特征×\(wl)")
         }
 
-        // 组合信号：配送 + 金额
-        if (lower.contains("配送") || lower.contains("骑手") || lower.contains("送达"))
-            && (ocrText.contains("¥") || ocrText.contains("￥") || lower.contains("实付") || lower.contains("合计")) {
-            add(.takeout, 0.28, "配送+金额")
+        // —— 支付 ——
+        let sp = hits(lower, strongPayment)
+        if sp > 0 {
+            add(.payment, min(0.95, 0.8 + Double(sp - 1) * 0.05), "支付强特征×\(sp)")
+        }
+        let wp = hits(lower, weakPayment)
+        if wp >= 2 && isScreenshot {
+            add(.payment, 0.55, "支付弱特征×\(wp)")
         }
 
-        let logisticsHits = countHits(lower, logisticsAll)
-        if logisticsHits > 0 {
-            add(.logistics, min(0.95, 0.4 + Double(logisticsHits) * 0.12), "快递关键词 ×\(logisticsHits)")
-        }
-        if lower.contains("取件码") || lower.contains("快递柜") || lower.contains("驿站") {
-            add(.logistics, 0.25, "取件场景")
+        // —— 验证码 ——
+        let sv = hits(lower, strongVerify)
+        if sv > 0 {
+            add(.verification, min(0.94, 0.78 + Double(sv - 1) * 0.05), "验证码特征")
         }
 
-        let payHits = countHits(lower, paymentAll)
-        if payHits > 0 {
-            add(.payment, min(0.92, 0.4 + Double(payHits) * 0.12), "支付关键词 ×\(payHits)")
+        // —— 聊天 ——
+        let sc = hits(lower, strongChat)
+        if sc > 0 && isScreenshot {
+            add(.chatSnippet, min(0.85, 0.6 + Double(sc - 1) * 0.08), "聊天界面")
         }
 
-        let verHits = countHits(lower, verificationAll)
-        if verHits > 0 {
-            add(.verification, min(0.92, 0.55 + Double(verHits) * 0.12), "验证码关键词")
-        }
-
-        let chatHits = countHits(lower, chatAll)
-        if chatHits >= 1 && isScreenshot {
-            add(.chatSnippet, min(0.85, 0.4 + Double(chatHits) * 0.12), "聊天界面")
-        }
-
-        if hasQRCode {
-            add(.qrCode, 0.9, "检测到二维码")
-        } else if barcodeCount > 0 {
-            add(.qrCode, 0.7, "检测到条码")
-        }
-
-        // 截图兜底
+        // 截图兜底：仅当完全没命中其它类时
         if isScreenshot && scores.isEmpty {
-            let ui = countHits(lower, junkUIAll)
-            add(.genericScreenshot, ui > 0 ? 0.5 : 0.4, "系统截图")
-        } else if isScreenshot {
-            let top = scores.values.max() ?? 0
-            if top < 0.45 {
-                add(.genericScreenshot, 0.42, "系统截图")
+            // 不再把「所有截图」都当废图堆进来——只给较低置信，且需要一定文字量
+            if lower.count >= 6 {
+                add(.genericScreenshot, 0.36, "系统截图")
             }
         }
 
         guard let best = scores.max(by: { $0.value < $1.value }) else {
-            return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: hasQRCode, ocrText: ocrText)
+            return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: false, ocrText: ocrText)
         }
 
         var conf = min(0.99, best.value)
-        // 多信号加成
-        if (reasons[best.key]?.count ?? 0) >= 2 { conf = min(0.99, conf + 0.05) }
+        if (reasons[best.key]?.count ?? 0) >= 2 { conf = min(0.99, conf + 0.04) }
 
-        // 非截图且弱信号：抑制误报（实拍风景等）
-        if !isScreenshot && conf < 0.48 && best.key != .qrCode && best.key != .takeout && best.key != .logistics {
-            return ClassificationResult(category: nil, confidence: conf * 0.4, reasons: [], hasQRCode: hasQRCode, ocrText: ocrText)
+        // 非截图抑制误报
+        if !isScreenshot {
+            switch best.key {
+            case .takeout, .logistics, .qrCode, .payment, .verification:
+                if conf < 0.5 {
+                    return ClassificationResult(category: nil, confidence: conf * 0.4, reasons: [], hasQRCode: false, ocrText: ocrText)
+                }
+            default:
+                if conf < 0.65 {
+                    return ClassificationResult(category: nil, confidence: conf * 0.3, reasons: [], hasQRCode: false, ocrText: ocrText)
+                }
+            }
         }
-        if !isScreenshot && conf < 0.38 {
-            return ClassificationResult(category: nil, confidence: conf * 0.3, reasons: [], hasQRCode: hasQRCode, ocrText: ocrText)
+
+        // 普通截图置信太低则丢弃（减少 499 张全进「普通截图」）
+        if best.key == .genericScreenshot && conf < 0.4 {
+            return ClassificationResult(category: nil, confidence: conf, reasons: reasons[best.key] ?? [], hasQRCode: false, ocrText: ocrText)
         }
 
         return ClassificationResult(
             category: best.key,
             confidence: conf,
             reasons: reasons[best.key] ?? [],
-            hasQRCode: hasQRCode,
+            hasQRCode: false,
             ocrText: ocrText
         )
     }
 
-    private func countHits(_ lowerText: String, _ keywords: [(raw: String, low: String)]) -> Int {
-        var count = 0
-        for k in keywords {
-            if lowerText.contains(k.low) { count += 1 }
-        }
-        return count
+    private func hits(_ lower: String, _ keys: [String]) -> Int {
+        var n = 0
+        for k in keys where lower.contains(k) { n += 1 }
+        return n
     }
 }

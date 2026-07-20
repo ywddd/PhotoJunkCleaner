@@ -10,6 +10,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("识别") {
+                    Toggle(isOn: $settings.preciseMode) {
+                        Label("精准识别（更慢更准）", systemImage: "wand.and.stars")
+                    }
+                    Text("关闭为快速模式：默认只做快速 OCR，二维码先检条码，大幅提速。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("扫描范围") {
                     Toggle("优先扫描截图", isOn: $settings.preferScreenshots)
                     Toggle("包含近期普通照片", isOn: $settings.includeRecent)
