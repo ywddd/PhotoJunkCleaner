@@ -18,6 +18,8 @@ final class ImageClassifierService {
     static let shared = ImageClassifierService()
 
     var preciseMode: Bool = false
+    /// 是否跑内置 MobileNet（由设置控制）
+    var useLocalML: Bool = true
 
     private init() {
         strongTakeout = Self.prep(Self.strongTakeoutKW)
@@ -192,7 +194,7 @@ final class ImageClassifierService {
     private func empty(isScreenshot: Bool) -> ClassificationResult {
         ClassificationResult(
             category: isScreenshot ? .genericScreenshot : nil,
-            confidence: isScreenshot ? 0.34 : 0,
+            confidence: isScreenshot ? 0.55 : 0,
             reasons: isScreenshot ? ["系统标记为截图"] : [],
             hasQRCode: false,
             ocrText: ""
@@ -303,11 +305,15 @@ final class ImageClassifierService {
     }
 
     private func sceneHints(cgImage: CGImage) async -> SceneHints {
-        // 系统 Vision 分类 + 可选内置 MobileNet，取更强信号
+        // 系统 Vision 分类 + 可选内置 MobileNet
         async let system = systemSceneHints(cgImage: cgImage)
-        async let mobile = LocalMLService.shared.classifyScene(cgImage: cgImage)
-        let (a, b) = await (system, mobile)
-        return mergeScenes(a, b)
+        if useLocalML && LocalMLService.shared.isReady {
+            async let mobile = LocalMLService.shared.classifyScene(cgImage: cgImage)
+            let (a, b) = await (system, mobile)
+            return mergeScenes(a, b)
+        } else {
+            return await system
+        }
     }
 
     private func mergeScenes(_ a: SceneHints, _ b: SceneHints) -> SceneHints {
@@ -497,51 +503,49 @@ final class ImageClassifierService {
         }
 
 
-        // —— 系统视觉场景加权（VNClassifyImageRequest）——
-        if scene.foodScore > 0.25 {
-            add(.takeout, min(0.22, scene.foodScore * 0.28), "图像含食物特征")
+        // —— 视觉场景加权（系统 Vision + 可选 MobileNet）——
+        // 注意：场景分要够高，否则进不了 ScanEngine 阈值
+        if scene.foodScore > 0.2 {
+            // 截图/有文字时更敢给外卖分；纯实拍食物仍可能是留念，给中等分
+            let base = isScreenshot ? 0.52 : 0.38
+            add(.takeout, min(0.72, base + scene.foodScore * 0.25), "图像含食物特征")
         }
-        if scene.packageScore > 0.25 {
-            add(.logistics, min(0.2, scene.packageScore * 0.25), "图像含包装/纸箱特征")
+        if scene.packageScore > 0.22 {
+            let base = isScreenshot ? 0.5 : 0.36
+            add(.logistics, min(0.7, base + scene.packageScore * 0.22), "图像含包装/纸箱特征")
         }
-        if scene.documentScore > 0.3 {
+        if scene.documentScore > 0.25 || scene.screenUIScore > 0.25 {
             if scores[.takeout] != nil || scores[.logistics] != nil || scores[.payment] != nil {
-                // 已有文字类命中时，文档特征加一点置信
                 if let top = scores.max(by: { $0.value < $1.value })?.key {
-                    add(top, 0.06, "图像偏文档/界面")
+                    add(top, 0.08, "图像偏文档/界面")
                 }
             } else if isScreenshot {
-                add(.otherJunk, min(0.35, scene.documentScore * 0.35), "截图偏文档界面")
+                add(.otherJunk, min(0.58, 0.4 + max(scene.documentScore, scene.screenUIScore) * 0.25), "截图偏文档/界面")
             }
         }
-        if scene.screenUIScore > 0.35 && isScreenshot {
-            if scores.isEmpty {
-                add(.genericScreenshot, 0.4, "图像像手机界面")
-            } else if scores[.genericScreenshot] != nil {
-                add(.genericScreenshot, 0.08, "界面特征")
-            }
+        if scene.screenUIScore > 0.28 && isScreenshot && scores[.genericScreenshot] == nil && scores.isEmpty == false {
+            // 已有其它类时略加
         }
-        // 强自然照片抑制：若无强文字命中，压掉弱其他类
+        // 强自然照片抑制
         if scene.looksLikeNormalPhoto && !isScreenshot {
             for k in Array(scores.keys) {
                 if k == .takeout || k == .logistics || k == .payment || k == .verification || k == .qrCode {
-                    // 保留强文字类
-                    if (scores[k] ?? 0) < 0.55 { scores[k] = (scores[k] ?? 0) * 0.4 }
+                    if (scores[k] ?? 0) < 0.55 { scores[k] = (scores[k] ?? 0) * 0.45 }
                 } else {
-                    scores[k] = (scores[k] ?? 0) * 0.25
+                    scores[k] = (scores[k] ?? 0) * 0.2
                 }
             }
         }
 
-        // —— 普通截图兜底 ——
-        if isScreenshot && scores.isEmpty {
-            if lower.count >= 8 {
-                add(.genericScreenshot, 0.38, "系统截图")
-            }
-        } else if isScreenshot {
-            let top = scores.values.max() ?? 0
-            if top < 0.42 && lower.count >= 10 {
-                add(.genericScreenshot, 0.36, "系统截图")
+        // —— 普通截图兜底：系统截图默认应进结果，方便人工核对 ——
+        if isScreenshot {
+            if scores.isEmpty {
+                add(.genericScreenshot, 0.55, "系统截图")
+            } else {
+                let top = scores.values.max() ?? 0
+                if top < 0.45 {
+                    add(.genericScreenshot, 0.5, "系统截图")
+                }
             }
         }
 
@@ -556,7 +560,7 @@ final class ImageClassifierService {
         if !isScreenshot {
             switch best.key {
             case .takeout, .logistics, .qrCode, .payment, .verification:
-                if conf < 0.48 {
+                if conf < 0.40 {
                     return ClassificationResult(category: nil, confidence: conf * 0.4, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
                 }
             case .chatSnippet:
@@ -570,11 +574,6 @@ final class ImageClassifierService {
             case .genericScreenshot:
                 return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
             }
-        }
-
-        // 快速路径下：普通截图过低丢弃
-        if best.key == .genericScreenshot && conf < 0.37 {
-            return ClassificationResult(category: nil, confidence: conf, reasons: reasons[best.key] ?? [], hasQRCode: hasQR, ocrText: ocrText)
         }
 
         return ClassificationResult(

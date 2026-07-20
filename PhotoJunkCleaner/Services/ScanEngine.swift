@@ -76,6 +76,7 @@ final class ScanEngine: ObservableObject {
 
         // 模式：设置里的 preciseMode
         classifier.preciseMode = settings.preciseMode
+        classifier.useLocalML = settings.useLocalML
 
         BackgroundScanKeeper.shared.bind(engine: self)
         BackgroundScanKeeper.shared.beginBackgroundScanIfNeeded()
@@ -280,19 +281,16 @@ final class ScanEngine: ObservableObject {
                     let need: Double
                     switch category {
                     case .takeout, .logistics, .qrCode, .payment, .verification:
-                        need = min(conf, 0.42)
+                        need = min(conf, 0.35)
                     case .chatSnippet:
-                        need = min(conf, 0.48)
+                        need = min(conf, 0.40)
                     case .otherJunk:
-                        need = max(min(conf, 0.5), 0.42)
+                        need = min(max(conf, 0.35), 0.45)
                     case .genericScreenshot:
-                        need = max(conf, precise ? 0.38 : 0.48)
+                        // 系统截图兜底应能进结果（默认不勾选删除）
+                        need = min(conf, 0.40)
                     }
                     guard result.confidence >= need else { continue }
-
-                    if !precise && category == .genericScreenshot && result.confidence < 0.52 {
-                        continue
-                    }
 
                     foundItems.append(
                         JunkPhotoItem(

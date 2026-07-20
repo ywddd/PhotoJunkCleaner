@@ -29,6 +29,10 @@ final class AppSettings: ObservableObject {
     @Published var preciseMode: Bool {
         didSet { defaults.set(preciseMode, forKey: Keys.preciseMode) }
     }
+    /// 使用内置 MobileNetV2 场景辅助（关则仅系统 Vision + OCR）
+    @Published var useLocalML: Bool {
+        didSet { defaults.set(useLocalML, forKey: Keys.useLocalML) }
+    }
     /// 永不删除 / 不扫描「收藏」
     @Published var protectFavorites: Bool {
         didSet { defaults.set(protectFavorites, forKey: Keys.protectFavorites) }
@@ -78,6 +82,7 @@ final class AppSettings: ObservableObject {
         static let protectedAlbumIds = "settings.protectedAlbumIds"
         static let settingsVersion = "settings.version"
         static let preciseMode = "settings.preciseMode"
+        static let useLocalML = "settings.useLocalML"
         static let recentDays = "settings.recentDays"
         static let scanAllPhotos = "settings.scanAllPhotos"
         static let cloudVisionEnabled = "settings.cloudVisionEnabled"
@@ -113,13 +118,21 @@ final class AppSettings: ObservableObject {
             defaults.set(2000, forKey: Keys.scanLimit)
             defaults.set(4, forKey: Keys.settingsVersion)
         }
+        // v5：放宽默认阈值 + 默认开本地 ML，解决「0 命中」过严问题
+        if defaults.integer(forKey: Keys.settingsVersion) < 5 {
+            defaults.set(0.32, forKey: Keys.minConfidence)
+            defaults.set(true, forKey: Keys.useLocalML)
+            defaults.set(false, forKey: Keys.preciseMode)
+            defaults.set(5, forKey: Keys.settingsVersion)
+        }
         preferScreenshots = defaults.object(forKey: Keys.preferScreenshots) as? Bool ?? true
         includeRecent = defaults.object(forKey: Keys.includeRecent) as? Bool ?? true
         scanLimit = defaults.object(forKey: Keys.scanLimit) as? Int ?? 2000
         recentDays = defaults.object(forKey: Keys.recentDays) as? Int ?? 365
         scanAllPhotos = defaults.object(forKey: Keys.scanAllPhotos) as? Bool ?? false
-        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.40
+        minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.32
         preciseMode = defaults.object(forKey: Keys.preciseMode) as? Bool ?? false
+        useLocalML = defaults.object(forKey: Keys.useLocalML) as? Bool ?? true
         protectFavorites = defaults.object(forKey: Keys.protectFavorites) as? Bool ?? true
         if let arr = defaults.array(forKey: Keys.protectedAlbumIds) as? [String] {
             protectedAlbumIds = Set(arr)

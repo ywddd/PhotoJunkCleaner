@@ -21,6 +21,22 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("本地模型 MobileNet") {
+                    Toggle(isOn: $settings.useLocalML) {
+                        Label("启用 MobileNetV2 辅助", systemImage: "cpu")
+                    }
+                    HStack {
+                        Text("模型状态")
+                        Spacer()
+                        Text(LocalMLService.shared.isReady ? "已加载 ✓" : "未加载（用系统分类）")
+                            .font(.subheadline)
+                            .foregroundStyle(LocalMLService.shared.isReady ? Color.green : Color.orange)
+                    }
+                    Text("默认开启。它不会单独出分类，而是给食物/包装/界面加权。关掉则仅 OCR + 系统 Vision。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("云端视觉（可选）") {
                     Toggle("启用云端视觉 API", isOn: $settings.cloudVisionEnabled)
                     Text("兼容 OpenAI 视觉接口。默认：本地先扫；仅「截图存疑 / 弱分类」才上云，正常照片不会张张请求（否则 4000 张会极慢）。可设次数上限。")
@@ -170,8 +186,8 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "0.9.1")
-                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.1 预发布。")
+                    LabeledContent("版本", value: "0.9.2")
+                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.2 预发布。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
