@@ -11,13 +11,12 @@ struct ClassificationResult {
     let ocrText: String
 }
 
-/// 本地 Vision 规则分类
-/// - 快速模式：只跑 fast OCR + 条码，不二次精扫
-/// - 精准模式：弱结果再 accurate 精扫
+/// 本地 Vision 规则分类（v1.6）
+/// - 快速：条码优先 + fast OCR，无二次精扫
+/// - 精准：弱结果可 accurate 精扫
 final class ImageClassifierService {
     static let shared = ImageClassifierService()
 
-    /// true = 允许二次 accurate（更慢更准）
     var preciseMode: Bool = false
 
     private init() {
@@ -28,10 +27,13 @@ final class ImageClassifierService {
         strongPayment = Self.prep(Self.strongPaymentKW)
         weakPayment = Self.prep(Self.weakPaymentKW)
         strongVerify = Self.prep(Self.strongVerifyKW)
+        weakNotify = Self.prep(Self.weakNotifyKW)
         strongChat = Self.prep(Self.strongChatKW)
+        weakChat = Self.prep(Self.weakChatKW)
+        otherJunk = Self.prep(Self.otherJunkKW)
     }
 
-    // MARK: - 关键词分层：强特征单命中即可；弱特征需 ≥2 或组合
+    // MARK: - 关键词
 
     private static let strongTakeoutKW: [String] = [
         "美团", "美团外卖", "饿了么", "ele.me", "eleme", "keeta",
@@ -40,44 +42,81 @@ final class ImageClassifierService {
         "再来一单", "联系骑手", "骑手正在", "预计送达", "取餐码",
         "准时宝", "外卖订单", "无需餐具", "配送费", "餐盒费",
         "肯德基", "kfc", "麦当劳", "mcdonald", "星巴克", "瑞幸",
-        "必胜客", "汉堡王", "华莱士", "塔斯汀", "蜜雪冰城", "库迪"
+        "必胜客", "汉堡王", "华莱士", "塔斯汀", "蜜雪冰城", "库迪",
+        "奈雪", "喜茶", "外卖已送达", "商家已接单", "骑手已接单"
     ]
 
     private static let weakTakeoutKW: [String] = [
         "外卖", "骑手", "配送中", "正在配送", "已取餐", "待取餐",
         "取餐柜", "出餐", "打包费", "神券", "满减", "起送",
-        "月售", "收餐地址", "超值换购", "点外卖", "餐品"
+        "月售", "收餐地址", "超值换购", "点外卖", "餐品", "送餐",
+        "预订单", "立即配送"
     ]
 
     private static let strongLogisticsKW: [String] = [
-        "顺丰", "中通", "圆通", "韵达", "申通", "极兔", "德邦",
+        "顺丰", "中通", "圆通", "韵达", "申通", "极兔", "德邦", "百世",
         "菜鸟驿站", "菜鸟裹裹", "丰巢", "快递柜", "取件码",
         "京东快递", "京东物流", "运单号", "快递单号", "物流单号",
-        "派件中", "派送中", "已签收", "请凭取件码", "驿站"
+        "派件中", "派送中", "已签收", "请凭取件码", "驿站",
+        "ems", "中国邮政", "邮政快递"
     ]
 
     private static let weakLogisticsKW: [String] = [
         "快递", "物流", "运单", "包裹", "揽收", "代收点", "自提柜",
-        "快递员", "取件", "运输中"
+        "快递员", "取件", "运输中", "待取件", "已发货", "出库"
     ]
 
     private static let strongPaymentKW: [String] = [
         "支付成功", "转账成功", "微信支付", "支付宝", "付款码", "收款码",
-        "交易成功", "云闪付", "付款成功", "退款成功", "收款成功"
+        "交易成功", "云闪付", "付款成功", "退款成功", "收款成功",
+        "已付款", "付款给", "收钱码", "扫码支付", "商家收款",
+        "账单详情", "消费成功", "转账给", "零钱通"
     ]
 
     private static let weakPaymentKW: [String] = [
-        "转账", "收款", "账单", "到账", "付款", "扣款"
+        "转账", "收款", "账单", "到账", "付款", "扣款", "退款",
+        "余额", "零钱", "实付", "入账", "提现"
     ]
 
+    /// 验证码
     private static let strongVerifyKW: [String] = [
         "验证码", "动态码", "校验码", "短信验证", "请勿泄露",
-        "切勿告知", "登录验证", "otp", "verification code"
+        "切勿告知", "登录验证", "otp", "verification code",
+        "一次性密码", "安全码", "登录码", "动态密码",
+        "两步验证", "二次验证", "身份验证", "分钟内有效"
+    ]
+
+    /// 通知 / 系统提示（与验证码同属 verification 展示类）
+    private static let weakNotifyKW: [String] = [
+        "通知", "推送", "系统通知", "消息通知", "服务通知",
+        "未读消息", "条新消息", "新通知", "通知中心",
+        "锁屏通知", "横幅", "提醒事项", "日历提醒",
+        "验证提醒", "安全提醒", "登录提醒", "异常登录",
+        "设备登录", "新设备", "短信", "验证短信"
     ]
 
     private static let strongChatKW: [String] = [
         "按住说话", "按住 说话", "对方正在输入", "撤回了一条消息",
-        "语音通话", "视频通话", "企业微信"
+        "语音通话", "视频通话", "企业微信", "消息已发出",
+        "引用", "转发了", "会话", "发消息"
+    ]
+
+    private static let weakChatKW: [String] = [
+        "微信", "wechat", "weixin", "qq", "钉钉", "飞书",
+        "telegram", "whatsapp", "聊天", "对话框",
+        "发送", "表情", "语音", "图片消息"
+    ]
+
+    /// 其它常见「临时废图」：电商订单确认、游戏战绩、广告落地等
+    private static let otherJunkKW: [String] = [
+        "订单详情", "待付款", "待发货", "待收货", "确认收货",
+        "拼多多", "淘宝", "天猫", "京东", "抖音商城",
+        "立即购买", "加入购物车", "优惠券", "领券",
+        "游戏战绩", "本局结算", "击杀", "胜利", "失败结算",
+        "广告", "点击下载", "立即下载", "打开app", "应用商店",
+        "邀请码", "助力", "砍一刀", "免费领",
+        "行程卡", "健康码", "核酸", // 历史遗留截图
+        "临时", "一次性", "截图保存"
     ]
 
     private let strongTakeout: [String]
@@ -87,7 +126,10 @@ final class ImageClassifierService {
     private let strongPayment: [String]
     private let weakPayment: [String]
     private let strongVerify: [String]
+    private let weakNotify: [String]
     private let strongChat: [String]
+    private let weakChat: [String]
+    private let otherJunk: [String]
 
     private static func prep(_ list: [String]) -> [String] {
         list.map { $0.lowercased() }
@@ -100,7 +142,7 @@ final class ImageClassifierService {
             return empty(isScreenshot: isScreenshot)
         }
 
-        // 快路径：条码优先；有码可跳过 OCR（极大加速二维码页）
+        // 条码优先：有码直接归二维码（可附带后续 OCR 但为速度默认跳过）
         let barcodeOnly = await detectBarcodesOnly(cgImage: cgImage)
         if barcodeOnly.hasQR || barcodeOnly.count > 0 {
             return ClassificationResult(
@@ -112,18 +154,19 @@ final class ImageClassifierService {
             )
         }
 
-        let accurate = forceAccurate || preciseMode
-        let pass = await ocrPass(cgImage: cgImage, accurate: accurate)
-        var result = score(ocrText: pass, isScreenshot: isScreenshot)
+        let pass = await ocrPass(cgImage: cgImage, accurate: forceAccurate)
+        var result = score(ocrText: pass, isScreenshot: isScreenshot, hasQR: false)
 
-        // 精准模式：仅当「有弱文字但未分类」才二次 accurate（快速模式永不二次）
-        if preciseMode && !forceAccurate && !accurate {
+        // 精准模式：仅弱结果二次 accurate
+        if preciseMode && !forceAccurate {
             let shouldRefine =
                 (result.category == nil && isScreenshot && pass.count >= 4)
-                || (result.category == .genericScreenshot && pass.count >= 8)
+                || (result.category == .genericScreenshot)
+                || (result.category == .otherJunk && result.confidence < 0.55)
+                || (result.confidence > 0 && result.confidence < 0.5)
             if shouldRefine {
                 let pass2 = await ocrPass(cgImage: cgImage, accurate: true)
-                let r2 = score(ocrText: pass2, isScreenshot: isScreenshot)
+                let r2 = score(ocrText: pass2, isScreenshot: isScreenshot, hasQR: false)
                 if better(r2, than: result) { result = r2 }
             }
         }
@@ -134,7 +177,7 @@ final class ImageClassifierService {
     private func empty(isScreenshot: Bool) -> ClassificationResult {
         ClassificationResult(
             category: isScreenshot ? .genericScreenshot : nil,
-            confidence: isScreenshot ? 0.35 : 0,
+            confidence: isScreenshot ? 0.34 : 0,
             reasons: isScreenshot ? ["系统标记为截图"] : [],
             hasQRCode: false,
             ocrText: ""
@@ -151,9 +194,10 @@ final class ImageClassifierService {
     private func rank(_ c: JunkCategory?) -> Int {
         guard let c else { return 0 }
         switch c {
-        case .takeout, .logistics, .qrCode, .payment, .verification: return 3
-        case .chatSnippet: return 2
-        case .genericScreenshot, .otherJunk: return 1
+        case .takeout, .logistics, .qrCode, .payment, .verification: return 4
+        case .chatSnippet: return 3
+        case .otherJunk: return 2
+        case .genericScreenshot: return 1
         }
     }
 
@@ -174,8 +218,7 @@ final class ImageClassifierService {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 let req = VNDetectBarcodesRequest()
-                // 只检 QR/常用，减少开销
-                req.symbologies = [.qr, .ean13, .code128, .pdf417]
+                req.symbologies = [.qr, .ean13, .ean8, .code128, .pdf417, .aztec, .dataMatrix]
                 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 do {
                     try handler.perform([req])
@@ -198,10 +241,11 @@ final class ImageClassifierService {
                 let textReq = VNRecognizeTextRequest()
                 textReq.recognitionLevel = accurate ? .accurate : .fast
                 textReq.usesLanguageCorrection = false
-                textReq.minimumTextHeight = accurate ? 0.012 : 0.025
+                textReq.minimumTextHeight = accurate ? 0.012 : 0.022
                 if #available(iOS 16.0, *) {
-                    // 快扫只用简体+英文
-                    textReq.recognitionLanguages = accurate ? ["zh-Hans", "zh-Hant", "en-US"] : ["zh-Hans", "en-US"]
+                    textReq.recognitionLanguages = accurate
+                        ? ["zh-Hans", "zh-Hant", "en-US"]
+                        : ["zh-Hans", "en-US"]
                 }
                 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 do {
@@ -212,9 +256,9 @@ final class ImageClassifierService {
                 }
                 let observations = (textReq.results as? [VNRecognizedTextObservation]) ?? []
                 var lines: [String] = []
-                lines.reserveCapacity(min(observations.count, 40))
-                for obs in observations.prefix(60) {
-                    guard let c = obs.topCandidates(1).first, c.confidence >= 0.28 else { continue }
+                lines.reserveCapacity(min(observations.count, 48))
+                for obs in observations.prefix(80) {
+                    guard let c = obs.topCandidates(1).first, c.confidence >= 0.25 else { continue }
                     lines.append(c.string)
                 }
                 cont.resume(returning: lines.joined(separator: "\n"))
@@ -224,7 +268,7 @@ final class ImageClassifierService {
 
     // MARK: - Scoring
 
-    private func score(ocrText: String, isScreenshot: Bool) -> ClassificationResult {
+    private func score(ocrText: String, isScreenshot: Bool, hasQR: Bool) -> ClassificationResult {
         let lower = ocrText.lowercased()
         if lower.isEmpty {
             return empty(isScreenshot: isScreenshot)
@@ -236,7 +280,10 @@ final class ImageClassifierService {
         func add(_ cat: JunkCategory, _ pts: Double, _ reason: String) {
             scores[cat, default: 0] += pts
             var r = reasons[cat] ?? []
-            if r.count < 5, !r.contains(reason) { r.append(reason); reasons[cat] = r }
+            if r.count < 6, !r.contains(reason) {
+                r.append(reason)
+                reasons[cat] = r
+            }
         }
 
         // —— 外卖 ——
@@ -246,16 +293,15 @@ final class ImageClassifierService {
         }
         let wt = hits(lower, weakTakeout)
         if wt >= 2 {
-            add(.takeout, min(0.9, 0.45 + Double(wt) * 0.1), "外卖弱特征×\(wt)")
+            add(.takeout, min(0.9, 0.48 + Double(wt) * 0.1), "外卖弱特征×\(wt)")
         } else if wt == 1 && st == 0 {
-            // 单弱特征不够，除非截图 + 金额符号
             if isScreenshot && (ocrText.contains("¥") || ocrText.contains("￥") || lower.contains("元")) {
-                add(.takeout, 0.55, "外卖弱特征+金额")
+                add(.takeout, 0.58, "外卖弱特征+金额")
             }
         }
         if (lower.contains("骑手") || lower.contains("配送")) &&
             (lower.contains("送达") || lower.contains("取餐") || ocrText.contains("¥") || ocrText.contains("￥")) {
-            add(.takeout, 0.3, "配送场景")
+            add(.takeout, 0.32, "配送场景")
         }
 
         // —— 快递 ——
@@ -265,7 +311,7 @@ final class ImageClassifierService {
         }
         let wl = hits(lower, weakLogistics)
         if wl >= 2 {
-            add(.logistics, min(0.88, 0.4 + Double(wl) * 0.1), "快递弱特征×\(wl)")
+            add(.logistics, min(0.88, 0.42 + Double(wl) * 0.1), "快递弱特征×\(wl)")
         }
 
         // —— 支付 ——
@@ -274,32 +320,76 @@ final class ImageClassifierService {
             add(.payment, min(0.95, 0.8 + Double(sp - 1) * 0.05), "支付强特征×\(sp)")
         }
         let wp = hits(lower, weakPayment)
-        if wp >= 2 && isScreenshot {
-            add(.payment, 0.55, "支付弱特征×\(wp)")
+        if wp >= 2 {
+            add(.payment, isScreenshot ? 0.58 : 0.48, "支付弱特征×\(wp)")
+        }
+        if (lower.contains("支付") || lower.contains("转账")) &&
+            (ocrText.contains("¥") || ocrText.contains("￥") || lower.contains("成功")) {
+            add(.payment, 0.28, "支付+金额/成功")
         }
 
-        // —— 验证码 ——
+        // —— 验证码 + 通知（同一展示类 verification）——
         let sv = hits(lower, strongVerify)
         if sv > 0 {
-            add(.verification, min(0.94, 0.78 + Double(sv - 1) * 0.05), "验证码特征")
+            add(.verification, min(0.95, 0.8 + Double(sv - 1) * 0.05), "验证码特征×\(sv)")
+        }
+        let sn = hits(lower, weakNotify)
+        if sn >= 2 && isScreenshot {
+            add(.verification, min(0.8, 0.45 + Double(sn) * 0.08), "通知特征×\(sn)")
+        } else if sn >= 1 && sv >= 1 {
+            add(.verification, 0.7, "验证码+通知")
+        }
+        // 短信样式：4–8 位数字 + 验证语境
+        if sv > 0 || lower.contains("验证") {
+            if lower.range(of: #"\b\d{4,8}\b"#, options: .regularExpression) != nil {
+                add(.verification, 0.25, "含验证码数字")
+            }
         }
 
         // —— 聊天 ——
         let sc = hits(lower, strongChat)
-        if sc > 0 && isScreenshot {
-            add(.chatSnippet, min(0.85, 0.6 + Double(sc - 1) * 0.08), "聊天界面")
+        if sc > 0 {
+            // 强特征：截图优先，非截图也允许但略降
+            add(.chatSnippet, min(0.9, (isScreenshot ? 0.72 : 0.55) + Double(sc - 1) * 0.08), "聊天强特征×\(sc)")
+        }
+        let wc = hits(lower, weakChat)
+        if wc >= 2 && (isScreenshot || sc > 0) {
+            add(.chatSnippet, min(0.78, 0.4 + Double(wc) * 0.08), "聊天弱特征×\(wc)")
+        }
+        // 微信 + 通话/消息 组合
+        if (lower.contains("微信") || lower.contains("wechat")) &&
+            (lower.contains("通话") || lower.contains("消息") || lower.contains("发送")) {
+            add(.chatSnippet, isScreenshot ? 0.55 : 0.42, "微信会话特征")
         }
 
-        // 截图兜底：仅当完全没命中其它类时
+        // —— 其他疑似无用（落地实现）——
+        let oj = hits(lower, otherJunk)
+        if oj >= 2 {
+            add(.otherJunk, min(0.82, 0.4 + Double(oj) * 0.08), "临时废图特征×\(oj)")
+        } else if oj == 1 && isScreenshot && lower.count >= 20 {
+            add(.otherJunk, 0.45, "截图含临时废图词")
+        }
+        // 电商订单但未命中外卖/快递
+        if scores[.takeout] == nil && scores[.logistics] == nil {
+            if lower.contains("订单") && (lower.contains("待") || lower.contains("详情") || lower.contains("编号")) {
+                add(.otherJunk, isScreenshot ? 0.5 : 0.4, "订单类截图")
+            }
+        }
+
+        // —— 普通截图兜底 ——
         if isScreenshot && scores.isEmpty {
-            // 不再把「所有截图」都当废图堆进来——只给较低置信，且需要一定文字量
-            if lower.count >= 6 {
+            if lower.count >= 8 {
+                add(.genericScreenshot, 0.38, "系统截图")
+            }
+        } else if isScreenshot {
+            let top = scores.values.max() ?? 0
+            if top < 0.42 && lower.count >= 10 {
                 add(.genericScreenshot, 0.36, "系统截图")
             }
         }
 
         guard let best = scores.max(by: { $0.value < $1.value }) else {
-            return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: false, ocrText: ocrText)
+            return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
         }
 
         var conf = min(0.99, best.value)
@@ -309,26 +399,32 @@ final class ImageClassifierService {
         if !isScreenshot {
             switch best.key {
             case .takeout, .logistics, .qrCode, .payment, .verification:
-                if conf < 0.5 {
-                    return ClassificationResult(category: nil, confidence: conf * 0.4, reasons: [], hasQRCode: false, ocrText: ocrText)
+                if conf < 0.48 {
+                    return ClassificationResult(category: nil, confidence: conf * 0.4, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
                 }
-            default:
-                if conf < 0.65 {
-                    return ClassificationResult(category: nil, confidence: conf * 0.3, reasons: [], hasQRCode: false, ocrText: ocrText)
+            case .chatSnippet:
+                if conf < 0.55 {
+                    return ClassificationResult(category: nil, confidence: conf * 0.35, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
                 }
+            case .otherJunk:
+                if conf < 0.55 {
+                    return ClassificationResult(category: nil, confidence: conf * 0.3, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
+                }
+            case .genericScreenshot:
+                return ClassificationResult(category: nil, confidence: 0, reasons: [], hasQRCode: hasQR, ocrText: ocrText)
             }
         }
 
-        // 普通截图置信太低则丢弃（减少 499 张全进「普通截图」）
-        if best.key == .genericScreenshot && conf < 0.4 {
-            return ClassificationResult(category: nil, confidence: conf, reasons: reasons[best.key] ?? [], hasQRCode: false, ocrText: ocrText)
+        // 快速路径下：普通截图过低丢弃
+        if best.key == .genericScreenshot && conf < 0.37 {
+            return ClassificationResult(category: nil, confidence: conf, reasons: reasons[best.key] ?? [], hasQRCode: hasQR, ocrText: ocrText)
         }
 
         return ClassificationResult(
             category: best.key,
             confidence: conf,
             reasons: reasons[best.key] ?? [],
-            hasQRCode: false,
+            hasQRCode: hasQR,
             ocrText: ocrText
         )
     }

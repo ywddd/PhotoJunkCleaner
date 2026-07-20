@@ -167,18 +167,18 @@ final class ScanEngine: ObservableObject {
                             let need: Double
                             switch category {
                             case .takeout, .logistics, .qrCode, .payment, .verification:
-                                need = min(conf, 0.45)
+                                need = min(conf, 0.42)
                             case .chatSnippet:
-                                need = min(conf, 0.5)
-                            case .genericScreenshot:
-                                need = max(conf, precise ? 0.4 : 0.5)
+                                need = min(conf, 0.48)
                             case .otherJunk:
-                                need = max(conf, 0.55)
+                                need = max(min(conf, 0.5), 0.42)
+                            case .genericScreenshot:
+                                need = max(conf, precise ? 0.38 : 0.48)
                             }
                             guard result.confidence >= need else { return nil }
 
-                            // 快速模式：普通截图默认不勾选且仅在置信更高时才收录
-                            if !precise && category == .genericScreenshot && result.confidence < 0.55 {
+                            // 快速模式：普通截图更严，避免刷屏
+                            if !precise && category == .genericScreenshot && result.confidence < 0.52 {
                                 return nil
                             }
 

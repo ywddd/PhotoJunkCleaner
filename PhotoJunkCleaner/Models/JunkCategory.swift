@@ -20,7 +20,7 @@ enum JunkCategory: String, CaseIterable, Identifiable, Codable {
         case .logistics: return "快递物流"
         case .qrCode: return "二维码截图"
         case .payment: return "支付/账单"
-        case .verification: return "验证码/通知"
+        case .verification: return "验证码与通知"
         case .chatSnippet: return "聊天截图"
         case .genericScreenshot: return "普通截图"
         case .otherJunk: return "其他疑似无用"
@@ -34,10 +34,10 @@ enum JunkCategory: String, CaseIterable, Identifiable, Codable {
         case .logistics: return "快递 / 运单 / 取件码"
         case .qrCode: return "含二维码或条码"
         case .payment: return "支付成功 / 账单"
-        case .verification: return "验证码 / 系统通知"
+        case .verification: return "验证码 / 推送 / 系统提醒"
         case .chatSnippet: return "微信 / QQ 等聊天"
         case .genericScreenshot: return "其他系统截图"
-        case .otherJunk: return "疑似无用但不确定"
+        case .otherJunk: return "订单 / 广告 / 临时页等"
         }
     }
 
@@ -70,7 +70,7 @@ enum JunkCategory: String, CaseIterable, Identifiable, Codable {
     /// 默认是否勾选参与清理（普通截图默认不勾）
     var defaultSelected: Bool {
         switch self {
-        case .genericScreenshot: return false
+        case .genericScreenshot, .otherJunk: return false
         default: return true
         }
     }

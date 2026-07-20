@@ -112,8 +112,14 @@ struct SettingsView: View {
                     Text("点选相册加入白名单。该相册内所有照片会被跳过。已保护 \(settings.protectedAlbumIds.count) 个相册。")
                 }
 
+                Section("分类说明") {
+                    Text("外卖 / 快递 / 二维码 / 支付：规则较完整。\n验证码与通知：含验证码 + 推送文案。\n聊天：聊天界面特征。\n其他疑似无用：电商订单、广告落地、临时页。\n普通截图：系统截图兜底（默认不勾选删除）。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("关于") {
-                    LabeledContent("版本", value: "1.1.0")
+                    LabeledContent("版本", value: "1.6.0")
                     Text("本地 Vision OCR + 条码识别，不上传任何照片。删除走系统 Photos API，进入「最近删除」。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
