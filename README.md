@@ -1,3 +1,7 @@
+## PhotoJunkCleaner 0.9.0（预发布）
+
+本地 Vision 分类 + OCR + 可选云端视觉。
+
 # 废图清理 (PhotoJunkCleaner) v1.1
 
 智能识别并清理相册里的外卖截图、快递物流、二维码、支付页、验证码等「用完即弃」图片。  

@@ -142,7 +142,7 @@ final class ImageClassifierService {
             return empty(isScreenshot: isScreenshot)
         }
 
-        // 条码优先：有码直接归二维码（可附带后续 OCR 但为速度默认跳过）
+        // 条码优先：有码直接归二维码
         let barcodeOnly = await detectBarcodesOnly(cgImage: cgImage)
         if barcodeOnly.hasQR || barcodeOnly.count > 0 {
             return ClassificationResult(
@@ -154,8 +154,23 @@ final class ImageClassifierService {
             )
         }
 
-        let pass = await ocrPass(cgImage: cgImage, accurate: forceAccurate)
-        var result = score(ocrText: pass, isScreenshot: isScreenshot, hasQR: false)
+        // 系统图像分类（零包体）+ 快速 OCR 并行
+        async let sceneTask = sceneHints(cgImage: cgImage)
+        async let ocrTask = ocrPass(cgImage: cgImage, accurate: forceAccurate)
+        let (scene, pass) = await (sceneTask, ocrTask)
+
+        // 明显「正常自然照片」且几乎无文字 → 直接跳过（大幅提速 + 降误报）
+        if !isScreenshot && scene.looksLikeNormalPhoto && pass.count < 8 {
+            return ClassificationResult(
+                category: nil,
+                confidence: 0,
+                reasons: scene.topReasons,
+                hasQRCode: false,
+                ocrText: pass
+            )
+        }
+
+        var result = score(ocrText: pass, isScreenshot: isScreenshot, hasQR: false, scene: scene)
 
         // 精准模式：仅弱结果二次 accurate
         if preciseMode && !forceAccurate {
@@ -166,7 +181,7 @@ final class ImageClassifierService {
                 || (result.confidence > 0 && result.confidence < 0.5)
             if shouldRefine {
                 let pass2 = await ocrPass(cgImage: cgImage, accurate: true)
-                let r2 = score(ocrText: pass2, isScreenshot: isScreenshot, hasQR: false)
+                let r2 = score(ocrText: pass2, isScreenshot: isScreenshot, hasQR: false, scene: scene)
                 if better(r2, than: result) { result = r2 }
             }
         }
@@ -266,9 +281,94 @@ final class ImageClassifierService {
         }
     }
 
+
+    // MARK: - System image classification (zero extra model size)
+
+    struct SceneHints {
+        var foodScore: Double = 0
+        var packageScore: Double = 0
+        var documentScore: Double = 0
+        var screenUIScore: Double = 0
+        var natureScore: Double = 0
+        var personScore: Double = 0
+        var topReasons: [String] = []
+
+        static let empty = SceneHints()
+
+        /// 更像正常相册照片（人物/风景/宠物），而非截图废图
+        var looksLikeNormalPhoto: Bool {
+            let natural = max(natureScore, personScore)
+            return natural >= 0.45 && documentScore < 0.35 && screenUIScore < 0.35
+        }
+    }
+
+    private func sceneHints(cgImage: CGImage) async -> SceneHints {
+        await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let request = VNClassifyImageRequest()
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+                do {
+                    try handler.perform([request])
+                } catch {
+                    cont.resume(returning: .empty)
+                    return
+                }
+                let obs = (request.results as? [VNClassificationObservation]) ?? []
+                var hints = SceneHints()
+                var tops: [String] = []
+                for o in obs.prefix(12) {
+                    let id = o.identifier.lowercased()
+                    let c = Double(o.confidence)
+                    if c < 0.12 { continue }
+                    if tops.count < 3 {
+                        tops.append("\(o.identifier) \(Int(c * 100))%")
+                    }
+                    // 食物
+                    if id.contains("food") || id.contains("meal") || id.contains("dish")
+                        || id.contains("pizza") || id.contains("burger") || id.contains("noodle")
+                        || id.contains("sushi") || id.contains("dessert") || id.contains("fruit")
+                        || id.contains("vegetable") || id.contains("menu") {
+                        hints.foodScore = max(hints.foodScore, c)
+                    }
+                    // 包装 / 纸箱
+                    if id.contains("carton") || id.contains("box") || id.contains("package")
+                        || id.contains("envelope") || id.contains("parcel") || id.contains("crate") {
+                        hints.packageScore = max(hints.packageScore, c)
+                    }
+                    // 文档
+                    if id.contains("document") || id.contains("book") || id.contains("paper")
+                        || id.contains("letter") || id.contains("newspaper") || id.contains("magazine") {
+                        hints.documentScore = max(hints.documentScore, c)
+                    }
+                    // 屏幕 / UI
+                    if id.contains("screen") || id.contains("monitor") || id.contains("laptop")
+                        || id.contains("website") || id.contains("web site") || id.contains("television")
+                        || id.contains("remote control") || id.contains("iPod") {
+                        hints.screenUIScore = max(hints.screenUIScore, c)
+                    }
+                    // 人物
+                    if id.contains("person") || id.contains("people") || id.contains("face")
+                        || id.contains("selfie") || id.contains("bride") || id.contains("groom") {
+                        hints.personScore = max(hints.personScore, c)
+                    }
+                    // 自然 / 风景 / 宠物
+                    if id.contains("landscape") || id.contains("mountain") || id.contains("beach")
+                        || id.contains("ocean") || id.contains("forest") || id.contains("sky")
+                        || id.contains("valley") || id.contains("lake") || id.contains("dog")
+                        || id.contains("cat") || id.contains("pet") || id.contains("flower")
+                        || id.contains("tree") || id.contains("sunset") {
+                        hints.natureScore = max(hints.natureScore, c)
+                    }
+                }
+                hints.topReasons = tops
+                cont.resume(returning: hints)
+            }
+        }
+    }
+
     // MARK: - Scoring
 
-    private func score(ocrText: String, isScreenshot: Bool, hasQR: Bool) -> ClassificationResult {
+    private func score(ocrText: String, isScreenshot: Bool, hasQR: Bool, scene: SceneHints = .empty) -> ClassificationResult {
         let lower = ocrText.lowercased()
         if lower.isEmpty {
             return empty(isScreenshot: isScreenshot)
@@ -373,6 +473,43 @@ final class ImageClassifierService {
         if scores[.takeout] == nil && scores[.logistics] == nil {
             if lower.contains("订单") && (lower.contains("待") || lower.contains("详情") || lower.contains("编号")) {
                 add(.otherJunk, isScreenshot ? 0.5 : 0.4, "订单类截图")
+            }
+        }
+
+
+        // —— 系统视觉场景加权（VNClassifyImageRequest）——
+        if scene.foodScore > 0.25 {
+            add(.takeout, min(0.22, scene.foodScore * 0.28), "图像含食物特征")
+        }
+        if scene.packageScore > 0.25 {
+            add(.logistics, min(0.2, scene.packageScore * 0.25), "图像含包装/纸箱特征")
+        }
+        if scene.documentScore > 0.3 {
+            if scores[.takeout] != nil || scores[.logistics] != nil || scores[.payment] != nil {
+                // 已有文字类命中时，文档特征加一点置信
+                if let top = scores.max(by: { $0.value < $1.value })?.key {
+                    add(top, 0.06, "图像偏文档/界面")
+                }
+            } else if isScreenshot {
+                add(.otherJunk, min(0.35, scene.documentScore * 0.35), "截图偏文档界面")
+            }
+        }
+        if scene.screenUIScore > 0.35 && isScreenshot {
+            if scores.isEmpty {
+                add(.genericScreenshot, 0.4, "图像像手机界面")
+            } else if scores[.genericScreenshot] != nil {
+                add(.genericScreenshot, 0.08, "界面特征")
+            }
+        }
+        // 强自然照片抑制：若无强文字命中，压掉弱其他类
+        if scene.looksLikeNormalPhoto && !isScreenshot {
+            for k in Array(scores.keys) {
+                if k == .takeout || k == .logistics || k == .payment || k == .verification || k == .qrCode {
+                    // 保留强文字类
+                    if (scores[k] ?? 0) < 0.55 { scores[k] = (scores[k] ?? 0) * 0.4 }
+                } else {
+                    scores[k] = (scores[k] ?? 0) * 0.25
+                }
             }
         }
 

@@ -170,8 +170,8 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "1.7.0")
-                    Text("本地 Vision OCR + 条码识别，不上传任何照片。删除走系统 Photos API，进入「最近删除」。")
+                    LabeledContent("版本", value: "0.9.0")
+                    Text("本地：系统图像分类 + OCR + 条码。云端视觉为可选项。删除走系统「最近删除」。版本 0.9.0（预发布）。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
