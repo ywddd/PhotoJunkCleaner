@@ -6,6 +6,8 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @State private var albums: [AlbumInfo] = []
     @State private var loadError: String?
+    @State private var cloudTestResult: String = ""
+    @State private var cloudTesting = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +19,50 @@ struct SettingsView: View {
                     Text("关闭为快速模式：默认只做快速 OCR，二维码先检条码，大幅提速。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("云端视觉（可选）") {
+                    Toggle("启用云端视觉 API", isOn: $settings.cloudVisionEnabled)
+                    Text("兼容 OpenAI Chat Completions 视觉接口。可填 GPT、Grok（xAI）、或中转站 Base URL。默认仅在本地不确定时调用，并有次数上限。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if settings.cloudVisionEnabled {
+                        TextField("Base URL（如 https://api.openai.com/v1）", text: $settings.cloudBaseURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        SecureField("API Key", text: $settings.cloudAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("模型名（如 gpt-4o-mini / grok-2-vision-1212）", text: $settings.cloudModel)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("代理（可选 http://host:port）", text: $settings.cloudProxyURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        Toggle("仅本地不确定时调用", isOn: $settings.cloudOnlyUncertain)
+                        Stepper(value: $settings.cloudMaxCallsPerScan, in: 5...500, step: 5) {
+                            Text("单次扫描最多云端 \(settings.cloudMaxCallsPerScan) 次")
+                        }
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text("不确定阈值")
+                                Spacer()
+                                Text(String(format: "%.0f%%", settings.cloudUncertainThreshold * 100))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Slider(value: $settings.cloudUncertainThreshold, in: 0.3...0.85, step: 0.05)
+                        }
+                        Button("测试连接") {
+                            testCloud()
+                        }
+                        if !cloudTestResult.isEmpty {
+                            Text(cloudTestResult)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Section("扫描范围") {
@@ -119,7 +165,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "1.6.0")
+                    LabeledContent("版本", value: "1.7.0")
                     Text("本地 Vision OCR + 条码识别，不上传任何照片。删除走系统 Photos API，进入「最近删除」。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -145,6 +191,18 @@ struct SettingsView: View {
             }
             .task {
                 await loadAlbums()
+            }
+        }
+    }
+
+    private func testCloud() {
+        cloudTesting = true
+        cloudTestResult = "测试中…"
+        Task {
+            let msg = await VisionAPIService.shared.testConnection(settings: settings.cloudConfig())
+            await MainActor.run {
+                cloudTestResult = msg
+                cloudTesting = false
             }
         }
     }

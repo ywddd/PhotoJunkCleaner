@@ -40,6 +40,33 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: - 云端视觉（可选，OpenAI 兼容）
+    @Published var cloudVisionEnabled: Bool {
+        didSet { defaults.set(cloudVisionEnabled, forKey: Keys.cloudVisionEnabled) }
+    }
+    @Published var cloudBaseURL: String {
+        didSet { defaults.set(cloudBaseURL, forKey: Keys.cloudBaseURL) }
+    }
+    @Published var cloudAPIKey: String {
+        didSet { defaults.set(cloudAPIKey, forKey: Keys.cloudAPIKey) }
+    }
+    @Published var cloudProxyURL: String {
+        didSet { defaults.set(cloudProxyURL, forKey: Keys.cloudProxyURL) }
+    }
+    @Published var cloudModel: String {
+        didSet { defaults.set(cloudModel, forKey: Keys.cloudModel) }
+    }
+    /// 仅本地不确定时调用云端
+    @Published var cloudOnlyUncertain: Bool {
+        didSet { defaults.set(cloudOnlyUncertain, forKey: Keys.cloudOnlyUncertain) }
+    }
+    @Published var cloudMaxCallsPerScan: Int {
+        didSet { defaults.set(cloudMaxCallsPerScan, forKey: Keys.cloudMaxCallsPerScan) }
+    }
+    @Published var cloudUncertainThreshold: Double {
+        didSet { defaults.set(cloudUncertainThreshold, forKey: Keys.cloudUncertainThreshold) }
+    }
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -53,6 +80,14 @@ final class AppSettings: ObservableObject {
         static let preciseMode = "settings.preciseMode"
         static let recentDays = "settings.recentDays"
         static let scanAllPhotos = "settings.scanAllPhotos"
+        static let cloudVisionEnabled = "settings.cloudVisionEnabled"
+        static let cloudBaseURL = "settings.cloudBaseURL"
+        static let cloudAPIKey = "settings.cloudAPIKey"
+        static let cloudProxyURL = "settings.cloudProxyURL"
+        static let cloudModel = "settings.cloudModel"
+        static let cloudOnlyUncertain = "settings.cloudOnlyUncertain"
+        static let cloudMaxCallsPerScan = "settings.cloudMaxCallsPerScan"
+        static let cloudUncertainThreshold = "settings.cloudUncertainThreshold"
     }
 
     private init() {
@@ -91,6 +126,28 @@ final class AppSettings: ObservableObject {
         } else {
             protectedAlbumIds = []
         }
+
+        cloudVisionEnabled = defaults.object(forKey: Keys.cloudVisionEnabled) as? Bool ?? false
+        cloudBaseURL = defaults.string(forKey: Keys.cloudBaseURL) ?? "https://api.openai.com/v1"
+        cloudAPIKey = defaults.string(forKey: Keys.cloudAPIKey) ?? ""
+        cloudProxyURL = defaults.string(forKey: Keys.cloudProxyURL) ?? ""
+        cloudModel = defaults.string(forKey: Keys.cloudModel) ?? "gpt-4o-mini"
+        cloudOnlyUncertain = defaults.object(forKey: Keys.cloudOnlyUncertain) as? Bool ?? true
+        cloudMaxCallsPerScan = defaults.object(forKey: Keys.cloudMaxCallsPerScan) as? Int ?? 40
+        cloudUncertainThreshold = defaults.object(forKey: Keys.cloudUncertainThreshold) as? Double ?? 0.55
+    }
+
+    func cloudConfig() -> CloudVisionConfig {
+        CloudVisionConfig(
+            enabled: cloudVisionEnabled,
+            baseURL: cloudBaseURL,
+            apiKey: cloudAPIKey,
+            proxyURL: cloudProxyURL,
+            model: cloudModel,
+            onlyUncertain: cloudOnlyUncertain,
+            maxCallsPerScan: cloudMaxCallsPerScan,
+            uncertainThreshold: cloudUncertainThreshold
+        )
     }
 
     func toggleAlbumProtection(_ albumId: String) {

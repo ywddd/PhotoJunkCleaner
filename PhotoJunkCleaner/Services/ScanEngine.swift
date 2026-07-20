@@ -2,6 +2,21 @@ import Foundation
 import Photos
 import UIKit
 
+
+/// 限制单次扫描的云端调用次数；max==0 表示禁用
+actor CloudQuota {
+    private var used = 0
+    private let max: Int
+    init(max: Int) { self.max = max }
+    func take() -> Bool {
+        if max <= 0 { return false }
+        if used >= max { return false }
+        used += 1
+        return true
+    }
+    func count() -> Int { used }
+}
+
 @MainActor
 final class ScanEngine: ObservableObject {
     @Published var progress = ScanProgress()
@@ -11,6 +26,7 @@ final class ScanEngine: ObservableObject {
     @Published var lastDeletedCount: Int = 0
     @Published var skippedProtectedCount: Int = 0
     @Published var backgroundNote: String?
+    @Published var cloudCallsUsed: Int = 0
 
     private var scanTask: Task<Void, Never>?
     private let library = PhotoLibraryService.shared
@@ -138,6 +154,9 @@ final class ScanEngine: ObservableObject {
             }()
             progress.phase = "\(precise ? "精准" : "快速") · \(scopeHint) · 候选 \(assets.count) 张"
 
+            let cloudCfg = settings.cloudConfig()
+            let quota = CloudQuota(max: cloudCfg.enabled ? max(0, cloudCfg.maxCallsPerScan) : 0)
+            cloudCallsUsed = 0
             var foundItems: [JunkPhotoItem] = []
             foundItems.reserveCapacity(min(assets.count, 256))
 
@@ -160,10 +179,47 @@ final class ScanEngine: ObservableObject {
                             guard let image = await library.requestAnalysisImage(for: asset) else {
                                 return nil
                             }
-                            let result = await classifier.classify(image: image, isScreenshot: isShot)
+                            var result = await classifier.classify(image: image, isScreenshot: isShot)
+
+                            let cloud = cloudCfg
+                            if cloud.enabled {
+                                let uncertain: Bool = {
+                                    guard let cat = result.category else { return true }
+                                    if result.confidence < cloud.uncertainThreshold { return true }
+                                    if cat == .genericScreenshot || cat == .otherJunk { return true }
+                                    return false
+                                }()
+                                let wantCloud = cloud.onlyUncertain ? uncertain : true
+                                if wantCloud, await quota.take() {
+                                    if let cloudResult = await VisionAPIService.shared.classify(
+                                        image: image,
+                                        isScreenshot: isShot,
+                                        ocrHint: result.ocrText,
+                                        settings: cloud
+                                    ) {
+                                        if let cc = cloudResult.category {
+                                            if result.category == nil
+                                                || cloudResult.confidence >= result.confidence - 0.05
+                                                || (result.category == .genericScreenshot && cc != .genericScreenshot) {
+                                                result = cloudResult
+                                            }
+                                        } else if result.category == .genericScreenshot || result.category == .otherJunk {
+                                            if cloudResult.confidence >= 0.55 {
+                                                result = ClassificationResult(
+                                                    category: nil,
+                                                    confidence: cloudResult.confidence,
+                                                    reasons: cloudResult.reasons,
+                                                    hasQRCode: false,
+                                                    ocrText: result.ocrText
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             guard let category = result.category else { return nil }
 
-                            // 快速模式对「普通截图」更严，减少噪声堆
                             let need: Double
                             switch category {
                             case .takeout, .logistics, .qrCode, .payment, .verification:
@@ -177,7 +233,6 @@ final class ScanEngine: ObservableObject {
                             }
                             guard result.confidence >= need else { return nil }
 
-                            // 快速模式：普通截图更严，避免刷屏
                             if !precise && category == .genericScreenshot && result.confidence < 0.52 {
                                 return nil
                             }
@@ -208,7 +263,10 @@ final class ScanEngine: ObservableObject {
                     lastUI = now
                     progress.processed = index
                     progress.found = foundItems.count
-                    progress.phase = "\(precise ? "精准" : "快速") \(index)/\(assets.count) · 命中 \(foundItems.count)"
+                    let used = await quota.count()
+                    cloudCallsUsed = used
+                    let cloudHint = settings.cloudVisionEnabled ? " · 云端\(used)" : ""
+                    progress.phase = "\(precise ? "精准" : "快速") \(index)/\(assets.count) · 命中 \(foundItems.count)\(cloudHint)"
                     groups = Self.buildGroups(from: foundItems)
                 }
             }
