@@ -30,6 +30,7 @@ struct ContentView: View {
                         HomeEmptyView(
                             settings: settings,
                             errorMessage: engine.errorMessage,
+                            emptyHint: engine.emptyResultHint,
                             onStart: startScan
                         )
                     } else {
@@ -101,6 +102,7 @@ struct ContentView: View {
 private struct HomeEmptyView: View {
     @ObservedObject var settings: AppSettings
     var errorMessage: String?
+    var emptyHint: String?
     var onStart: () -> Void
 
     var body: some View {
@@ -147,6 +149,21 @@ private struct HomeEmptyView: View {
                         .padding(.vertical, 8)
                         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
+                }
+
+                if let emptyHint, !emptyHint.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("扫描完成 · 0 命中", systemImage: "info.circle")
+                            .font(.subheadline.weight(.semibold))
+                        Text(emptyHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
                 }
 
                 VStack(alignment: .leading, spacing: 14) {
@@ -244,7 +261,7 @@ private struct ScanningView: View {
     @ObservedObject var engine: ScanEngine
 
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 18) {
             Spacer()
 
             ZStack {
@@ -269,18 +286,27 @@ private struct ScanningView: View {
             }
 
             Text(engine.progress.phase)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // 速度 + ETA
+            HStack(spacing: 16) {
+                Label(engine.progress.speedText, systemImage: "hare")
+                Label("剩余 \(engine.progress.etaText)", systemImage: "clock")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            Text("已处理 \(engine.progress.processed) / \(engine.progress.total) · 命中 \(engine.progress.found)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
             Text("锁屏后系统会再给一小段后台时间；彻底杀进程会中断。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Text("已处理 \(engine.progress.processed) / \(engine.progress.total) · 命中 \(engine.progress.found)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
 
             Button("取消", role: .destructive) {
                 engine.cancel()

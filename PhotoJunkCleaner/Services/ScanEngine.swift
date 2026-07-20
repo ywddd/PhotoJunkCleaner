@@ -27,6 +27,8 @@ final class ScanEngine: ObservableObject {
     @Published var skippedProtectedCount: Int = 0
     @Published var backgroundNote: String?
     @Published var cloudCallsUsed: Int = 0
+    /// 扫完 0 命中时的可读原因
+    @Published var emptyResultHint: String?
 
     private var scanTask: Task<Void, Never>?
     private let library = PhotoLibraryService.shared
@@ -72,7 +74,8 @@ final class ScanEngine: ObservableObject {
         backgroundNote = nil
         groups = []
         skippedProtectedCount = 0
-        progress = ScanProgress(phase: "申请权限…")
+        progress = ScanProgress(phase: "申请权限…", startedAt: Date())
+        emptyResultHint = nil
 
         // 模式：设置里的 preciseMode
         classifier.preciseMode = settings.preciseMode
@@ -143,6 +146,7 @@ final class ScanEngine: ObservableObject {
             progress.total = assets.count
             progress.processed = 0
             progress.found = 0
+            if progress.startedAt == nil { progress.startedAt = Date() }
             let scopeHint: String = {
                 if self.settings.scanAllPhotos { return "全部图库" }
                 var parts: [String] = []
@@ -277,6 +281,8 @@ final class ScanEngine: ObservableObject {
                     let asset = hit.asset
                     let isShot = hit.isShot
                     guard let category = result.category else { continue }
+                    // 用户关闭的分类不收录
+                    if !settings.isCategoryEnabled(category) { continue }
 
                     let need: Double
                     switch category {
@@ -311,10 +317,21 @@ final class ScanEngine: ObservableObject {
                 index = end
                 let now = Date()
                 // UI 刷新更稀：0.2s
-                if now.timeIntervalSince(lastUI) > 0.2 || index >= assets.count {
+                if now.timeIntervalSince(lastUI) > 0.15 || index >= assets.count {
                     lastUI = now
                     progress.processed = index
                     progress.found = foundItems.count
+                    if let startAt = progress.startedAt {
+                        let elapsed = max(0.001, now.timeIntervalSince(startAt))
+                        let speed = Double(index) / elapsed
+                        progress.itemsPerSecond = speed
+                        let remain = assets.count - index
+                        if speed > 0.05 && remain > 0 {
+                            progress.etaSeconds = Double(remain) / speed
+                        } else if remain == 0 {
+                            progress.etaSeconds = 0
+                        }
+                    }
                     let used = await quota.count()
                     cloudCallsUsed = used
                     let cloudHint = settings.cloudVisionEnabled ? " · 云端\(used)" : ""
@@ -325,12 +342,26 @@ final class ScanEngine: ObservableObject {
 
             if Task.isCancelled {
                 progress.phase = "已取消"
+                emptyResultHint = nil
             } else {
                 groups = Self.buildGroups(from: foundItems)
                 progress.processed = assets.count
                 progress.found = foundItems.count
+                progress.etaSeconds = 0
                 let protectHint = protectFav || !albumIds.isEmpty ? " · 已跳过保护项" : ""
                 progress.phase = "完成 · 共 \(foundItems.count) 张\(protectHint)"
+                if foundItems.isEmpty {
+                    emptyResultHint = Self.makeEmptyHint(
+                        prefer: prefer,
+                        includeRecent: includeRecent,
+                        scanAll: settings.scanAllPhotos,
+                        limit: scanLimit,
+                        conf: conf,
+                        enabledCount: settings.enabledCategoryIds.count
+                    )
+                } else {
+                    emptyResultHint = nil
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -339,6 +370,35 @@ final class ScanEngine: ObservableObject {
 
         isScanning = false
         BackgroundScanKeeper.shared.endBackgroundTask()
+    }
+
+    private static func makeEmptyHint(
+        prefer: Bool,
+        includeRecent: Bool,
+        scanAll: Bool,
+        limit: Int,
+        conf: Double,
+        enabledCount: Int
+    ) -> String {
+        var tips: [String] = ["没有命中可疑废图，可尝试："]
+        if !scanAll && prefer && !includeRecent {
+            tips.append("· 打开「包含普通照片」或「扫描全部照片」")
+        }
+        if !scanAll && includeRecent {
+            tips.append("· 增大「普通照片天数」或打开「扫描全部」")
+        }
+        if limit > 0 && limit < 1000 {
+            tips.append("· 提高「最多扫描」上限（当前 \(limit)）")
+        }
+        if conf > 0.4 {
+            tips.append(String(format: "· 降低最低置信度（当前 %.0f%%）", conf * 100))
+        }
+        if enabledCount > 0 && enabledCount < JunkCategory.allCases.count {
+            tips.append("· 检查设置里是否关闭了部分分类")
+        }
+        tips.append("· 确认照片权限为「所有照片」")
+        tips.append("· 关闭「精准」用快速模式再扫一轮")
+        return tips.joined(separator: "\n")
     }
 
     private static func buildGroups(from items: [JunkPhotoItem]) -> [CategoryGroup] {

@@ -86,6 +86,23 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("识别分类") {
+                    Text("关闭的分类扫描时不会收录到结果。至少保留一类。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(JunkCategory.allCases) { cat in
+                        Toggle(isOn: Binding(
+                            get: { settings.isCategoryEnabled(cat) },
+                            set: { settings.setCategoryEnabled(cat, enabled: $0) }
+                        )) {
+                            Label(cat.displayName, systemImage: cat.systemImage)
+                        }
+                    }
+                    Button("全部开启") {
+                        settings.enableAllCategories()
+                    }
+                }
+
                 Section("扫描范围") {
                     Toggle("优先扫描截图", isOn: $settings.preferScreenshots)
                     Toggle("包含普通照片", isOn: $settings.includeRecent)
@@ -186,8 +203,8 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "0.9.2")
-                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.2 预发布。")
+                    LabeledContent("版本", value: "0.9.3")
+                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.3 预发布。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -33,6 +33,10 @@ final class AppSettings: ObservableObject {
     @Published var useLocalML: Bool {
         didSet { defaults.set(useLocalML, forKey: Keys.useLocalML) }
     }
+    /// 参与结果展示/收录的分类（rawValue）；空集合视为全部开启
+    @Published var enabledCategoryIds: Set<String> {
+        didSet { defaults.set(Array(enabledCategoryIds), forKey: Keys.enabledCategoryIds) }
+    }
     /// 永不删除 / 不扫描「收藏」
     @Published var protectFavorites: Bool {
         didSet { defaults.set(protectFavorites, forKey: Keys.protectFavorites) }
@@ -83,6 +87,7 @@ final class AppSettings: ObservableObject {
         static let settingsVersion = "settings.version"
         static let preciseMode = "settings.preciseMode"
         static let useLocalML = "settings.useLocalML"
+        static let enabledCategoryIds = "settings.enabledCategoryIds"
         static let recentDays = "settings.recentDays"
         static let scanAllPhotos = "settings.scanAllPhotos"
         static let cloudVisionEnabled = "settings.cloudVisionEnabled"
@@ -133,6 +138,11 @@ final class AppSettings: ObservableObject {
         minConfidence = defaults.object(forKey: Keys.minConfidence) as? Double ?? 0.32
         preciseMode = defaults.object(forKey: Keys.preciseMode) as? Bool ?? false
         useLocalML = defaults.object(forKey: Keys.useLocalML) as? Bool ?? true
+        if let arr = defaults.array(forKey: Keys.enabledCategoryIds) as? [String], !arr.isEmpty {
+            enabledCategoryIds = Set(arr)
+        } else {
+            enabledCategoryIds = Set(JunkCategory.allCases.map(\.rawValue))
+        }
         protectFavorites = defaults.object(forKey: Keys.protectFavorites) as? Bool ?? true
         if let arr = defaults.array(forKey: Keys.protectedAlbumIds) as? [String] {
             protectedAlbumIds = Set(arr)
@@ -174,7 +184,33 @@ final class AppSettings: ObservableObject {
     func isAlbumProtected(_ albumId: String) -> Bool {
         protectedAlbumIds.contains(albumId)
     }
+
+    func isCategoryEnabled(_ category: JunkCategory) -> Bool {
+        // 空 = 全部
+        if enabledCategoryIds.isEmpty { return true }
+        return enabledCategoryIds.contains(category.rawValue)
+    }
+
+    func setCategoryEnabled(_ category: JunkCategory, enabled: Bool) {
+        if enabledCategoryIds.isEmpty {
+            enabledCategoryIds = Set(JunkCategory.allCases.map(\.rawValue))
+        }
+        if enabled {
+            enabledCategoryIds.insert(category.rawValue)
+        } else {
+            enabledCategoryIds.remove(category.rawValue)
+        }
+        // 不允许全关
+        if enabledCategoryIds.isEmpty {
+            enabledCategoryIds = Set(JunkCategory.allCases.map(\.rawValue))
+        }
+    }
+
+    func enableAllCategories() {
+        enabledCategoryIds = Set(JunkCategory.allCases.map(\.rawValue))
+    }
 }
+
 
 struct AlbumInfo: Identifiable, Hashable {
     let id: String
