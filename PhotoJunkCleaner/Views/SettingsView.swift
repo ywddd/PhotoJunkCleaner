@@ -203,8 +203,8 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: "0.9.3")
-                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.3 预发布。")
+                    LabeledContent("版本", value: "0.9.4")
+                    Text("本地：系统图像分类 + MobileNetV2 + OCR + 条码。云端可选。0.9.4 预发布。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
